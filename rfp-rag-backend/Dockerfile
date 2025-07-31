@@ -13,7 +13,8 @@ WORKDIR /install
 
 # Copy only the requirements file and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# We install to this specific directory so we can copy it later
+RUN pip install --no-cache-dir -r requirements.txt --target=/install
 
 
 # --- STAGE 2: The Final Image ---
@@ -23,8 +24,12 @@ FROM python:3.11-slim
 # Set the working directory in the final container
 WORKDIR /app
 
-# Copy the installed dependencies from the "builder" stage
+# **FIX**: Copy both the libraries AND the executables (like gunicorn) from the builder stage
 COPY --from=builder /install /usr/local/lib/python3.11/site-packages/
+COPY --from=builder /install/bin /usr/local/bin/
+
+# **FIX**: Install the missing pypdf dependency
+RUN pip install pypdf
 
 # Copy the application code
 COPY . .

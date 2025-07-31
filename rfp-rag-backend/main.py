@@ -4,21 +4,12 @@ from typing import List
 from datetime import timedelta
 
 # --- Third-Party Imports ---
-import chromadb
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, status
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
-
-# --- LangChain Imports ---
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chains import ConversationalRetrievalChain
-from langchain.prompts import PromptTemplate
 
 # --- Local Application Imports ---
 import crud, models, schemas, auth
@@ -36,7 +27,7 @@ DB_DIRECTORY = "/tmp/chroma_db"
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
 
-app = FastAPI(title="RFP RAG System Backend - Simplified")
+app = FastAPI(title="RFP RAG System Backend - Upload Test")
 
 # --- CORS Configuration ---
 origins = [
@@ -98,6 +89,35 @@ def process_document(file_path: str, collection_name: str):
 # ==============================================================================
 # API ENDPOINTS
 # ==============================================================================
+
+# --- NEW TEMPORARY TEST ENDPOINT ---
+@app.post("/upload-test/")
+async def simple_upload_test(file: UploadFile = File(...)):
+    """
+    This is a simple test endpoint. It only saves the file to a temporary
+    directory and does nothing else. This helps verify the core upload mechanism.
+    """
+    # The /tmp/ directory is guaranteed to be writable in App Runner
+    file_location = f"/tmp/{file.filename}"
+    print(f"--- [TEST] Received file: {file.filename}. Attempting to save to {file_location} ---")
+    try:
+        with open(file_location, "wb+") as file_object:
+            shutil.copyfileobj(file.file, file_object)
+        
+        # Check if the file was actually saved
+        if os.path.exists(file_location):
+            print(f"--- [SUCCESS] File '{file.filename}' saved successfully to /tmp. ---")
+            # Clean up the test file
+            os.remove(file_location)
+            return {"info": f"Test successful. File '{file.filename}' was received and saved."}
+        else:
+            print(f"--- [FAILURE] File write operation did not create the file at {file_location}. ---")
+            raise HTTPException(status_code=500, detail="File write failed on server.")
+
+    except Exception as e:
+        print(f"!!! [FATAL TEST ERROR] An exception occurred during the simple upload test. !!!")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An error occurred during test: {str(e)}")
 
 # --- Authentication Endpoints ---
 @app.post("/token", response_model=schemas.Token)

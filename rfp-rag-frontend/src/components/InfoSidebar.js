@@ -1,7 +1,7 @@
 /*
 -------------------------------------------------------------------
-File: src/components/InfoSidebar.js (Corrected)
-Description: Removed the unused DownloadIcon component to fix the build error.
+File: src/components/InfoSidebar.js (Complete)
+Description: The right sidebar for documents and settings.
 -------------------------------------------------------------------
 */
 import React, { useState, useEffect, useCallback } from 'react';
@@ -16,8 +16,6 @@ const TrashIcon = () => (
         <line x1="14" y1="11" x2="14" y2="17"></line>
     </svg>
 );
-
-// The unused DownloadIcon component has been removed from this file.
 
 const InfoSidebar = ({ project }) => {
     const { addNotification } = useNotification();
@@ -64,13 +62,18 @@ const InfoSidebar = ({ project }) => {
         setIsUploading(true);
         const formData = new FormData();
         formData.append('file', selectedFile);
+
+        console.log("--- [TEST] Attempting to upload to /upload-test/ endpoint. ---");
+
         try {
-            await api.post(`/rfps/${project.project_id}/upload/`, formData);
-            addNotification(`File '${selectedFile.name}' uploaded successfully!`);
+            const response = await api.post(`/upload-test/`, formData);
+            
+            console.log("--- [SUCCESS] Received response from test endpoint:", response.data);
+            addNotification(`Test successful: ${response.data.info}`);
             setSelectedFile(null);
-            await fetchSidebarData();
         } catch (e) {
-            addNotification('File upload failed.', 'error');
+            console.error("--- [FAILURE] Error during test upload:", e);
+            addNotification('Test upload failed. Check console and backend logs.', 'error');
         } finally {
             setIsUploading(false);
         }
