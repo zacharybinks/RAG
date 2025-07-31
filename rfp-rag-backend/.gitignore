@@ -1,0 +1,6 @@
+chroma_db/*
+rfp_projects/*
+__pycache__/
+.env
+!rfp_projects/.gitkeep
+!chroma_db/.gitkeep

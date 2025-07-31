@@ -1,0 +1,122 @@
+/*
+-------------------------------------------------------------------
+File: src/App.css (Updated)
+-------------------------------------------------------------------
+*/
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background-color: #f4f7f9; font-size: 16px; }
+.App { text-align: center; }
+.App-header { padding: 0; background-color: #282c34; color: white; }
+main { padding: 20px; }
+.card { background-color: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px auto; max-width: 900px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; }
+.error-message { color: #d9534f; font-weight: bold; }
+.splash-page { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; text-align: center; }
+.splash-title { font-size: 3.5rem; font-weight: bold; background: -webkit-linear-gradient(45deg, #4a90e2, #2e7d32); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 1rem; }
+.splash-subtitle { font-size: 1.25rem; color: #555; margin-bottom: 2.5rem; max-width: 600px; line-height: 1.7; }
+.splash-buttons { display: flex; gap: 20px; }
+.splash-button { padding: 15px 30px; font-size: 1.2rem; color: white; background-image: linear-gradient(45deg, #4a90e2, #2e7d32); border: none; border-radius: 50px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+.splash-button:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+.splash-button.secondary { background-image: linear-gradient(45deg, #6c757d, #343a40); }
+.create-project-form { display: flex; gap: 10px; }
+.create-project-form input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+.create-project-form button { padding: 10px 20px; background-color: #4a90e2; color: white; border: none; border-radius: 5px; cursor: pointer; }
+.project-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+.project-item { position: relative; background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #eee; cursor: pointer; transition: all 0.2s ease-in-out; }
+.project-item:hover { transform: translateY(-5px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+.project-item h3 { margin: 0 0 5px 0; color: #333; }
+.project-item p { margin: 0; font-size: 0.9em; color: #666; }
+.workspace-layout { display: flex; gap: 20px; max-width: 1600px; margin: 0 auto; height: 80vh; padding: 0 20px; }
+.chat-container { flex-grow: 1; display: flex; flex-direction: column; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); overflow: hidden; }
+.chat-history { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
+.chat-message { padding: 15px 20px; border-radius: 12px; margin-bottom: 15px; max-width: 80%; text-align: left; line-height: 1.6; }
+.chat-message p { margin: 0; }
+.chat-message.query { background-color: #dcf8c6; align-self: flex-end; margin-left: auto; }
+.chat-message.answer { background-color: #f1f3f5; align-self: flex-start; }
+.message-content p { margin-top: 0; margin-bottom: 1rem; }
+.message-content h1, .message-content h2, .message-content h3 { margin-top: 1.5rem; margin-bottom: 1rem; font-weight: 600; }
+.message-content ul, .message-content ol { padding-left: 20px; margin-bottom: 1rem; }
+.message-content li { margin-bottom: 0.5rem; }
+.chat-message.error { background-color: #ffebee; color: #c62828; }
+.chat-message.empty, .chat-message.typing { text-align: center; color: #888; width: 100%; max-width: 100%; background: none; align-self: center; }
+.sources { font-size: 0.85em; color: #666; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0; }
+.sources strong { color: #333; }
+.prompt-form { display: flex; padding: 15px; border-top: 1px solid #ddd; }
+.prompt-form textarea { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; resize: none; margin-right: 10px; line-height: 1.5; }
+.prompt-form button { padding: 10px 20px; background-color: #4a90e2; color: white; border: none; border-radius: 5px; cursor: pointer; }
+.function-sidebar { width: 280px; flex-shrink: 0; background-color: #ffffff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); overflow-y: auto; }
+.function-sidebar h3 { margin-top: 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+.module-accordion { margin-bottom: 10px; }
+.module-header { width: 100%; background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 12px; text-align: left; font-size: 1em; font-weight: bold; cursor: pointer; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+.module-header .arrow { transition: transform 0.3s ease; }
+.module-header .arrow.expanded { transform: rotate(180deg); }
+.module-content { padding: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.function-button { flex-grow: 1; background-color: #fff; border: 1px solid #ccc; color: #333; padding: 10px; text-align: left; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+.function-button:hover { background-color: #f0f0f0; }
+.info-sidebar { width: 320px; flex-shrink: 0; }
+.info-sidebar .card { height: 100%; margin: 0; display: flex; flex-direction: column; overflow: auto; }
+.sidebar-tabs { display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px; }
+.sidebar-tabs button { flex: 1; padding: 10px; border: none; background: none; cursor: pointer; font-size: 1em; color: #666; border-bottom: 2px solid transparent; }
+.sidebar-tabs button.active { color: #4a90e2; border-bottom: 2px solid #4a90e2; }
+.sidebar-content { flex-grow: 1; }
+.settings-area textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; resize: vertical; margin-bottom: 10px; box-sizing: border-box; line-height: 1.6; }
+.settings-area button, .file-upload-area button { width: 100%; padding: 10px; background-color: #2e7d32; color: white; border: none; border-radius: 5px; cursor: pointer; }
+.file-upload-area input { margin-bottom: 10px; width: 100%; }
+.settings-area button:disabled, .file-upload-area button:disabled { background-color: #9e9e9e; cursor: not-allowed; }
+.document-list-area ul { list-style-type: none; padding: 0; margin-top: 10px; max-height: 400px; overflow-y: auto; word-break: break-word; }
+.document-list-area li { background-color: #f9f9f9; padding: 8px 12px; border-radius: 4px; margin-bottom: 5px; font-size: 0.9em; border: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.document-list-area li strong { color: #2e7d32; }
+.notification { position: fixed; top: 20px; right: 20px; padding: 15px 25px; border-radius: 8px; color: white; font-size: 1.1em; z-index: 1000; transform: translateX(120%); transition: transform 0.5s ease-in-out; }
+.notification.show { transform: translateX(0); }
+.notification.success { background-color: #2e7d32; }
+.notification.error { background-color: #d9534f; }
+.breadcrumbs { background-color: #e9ecef; padding: 10px 20px; text-align: left; max-width: 1600px; margin: -20px auto 20px auto; }
+.breadcrumbs a { color: #4a90e2; text-decoration: none; }
+.breadcrumbs a:hover { text-decoration: underline; }
+.breadcrumbs span { color: #6c757d; }
+.info-message { background-color: #e7f3fe; color: #0d6efd; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 15px; }
+.auth-page { display: flex; justify-content: center; align-items: center; padding-top: 50px; }
+.auth-card { width: 100%; max-width: 400px; }
+.auth-card h2 { text-align: center; margin-bottom: 20px; }
+.auth-card form { display: flex; flex-direction: column; gap: 15px; }
+.auth-card input { padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
+.auth-card button { padding: 12px; background-color: #4a90e2; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; }
+.auth-switch { text-align: center; margin-top: 20px; }
+.auth-switch span { color: #4a90e2; cursor: pointer; text-decoration: underline; }
+.user-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: #f0f0f0; border-radius: 8px; margin: 20px auto; max-width: 900px; }
+.logout-button { padding: 8px 15px; background-color: #d9534f; color: white; border: none; border-radius: 5px; cursor: pointer; }
+.header-content { max-width: 1600px; margin: 0 auto; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+.logo-container { display: flex; align-items: center; gap: 10px; font-size: 1.2em; font-weight: bold; }
+.logo-placeholder { width: 40px; height: 40px; background-color: #4a90e2; color: white; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 1.5em; }
+.user-menu { position: relative; }
+.user-button { background: none; border: none; color: white; font-size: 1em; cursor: pointer; padding: 10px; }
+.dropdown-menu { position: absolute; top: 100%; right: 0; background-color: white; border-radius: 5px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); padding: 5px; z-index: 100; }
+.dropdown-menu button { background: none; border: none; padding: 10px 20px; width: 100%; text-align: left; cursor: pointer; color: #333; }
+.dropdown-menu button:hover { background-color: #f0f0f0; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.modal-content { background: white; padding: 25px; border-radius: 8px; width: 90%; max-width: 600px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; }
+.modal-header h2 { margin: 0; }
+.close-button { background: none; border: none; font-size: 2em; cursor: pointer; color: #aaa; }
+.project-settings form, .delete-section { display: flex; flex-direction: column; }
+.project-settings input { margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+.project-settings button { padding: 10px; background-color: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.delete-section { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }
+.delete-section .delete-button { background-color: #d9534f; }
+.prompt-manager-form { display: flex; flex-direction: column; gap: 15px; }
+.prompt-manager-form input, .prompt-manager-form textarea { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+.prompt-manager-form textarea { resize: vertical; }
+.settings-button { position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 1.2em; cursor: pointer; opacity: 0.5; }
+.project-item:hover .settings-button { opacity: 1; }
+.document-list { padding: 0; list-style: none; }
+.document-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-radius: 4px; cursor: pointer; }
+.document-list li:nth-child(odd) { background-color: #f9f9f9; }
+.document-list li:hover { background-color: #e9ecef; }
+.doc-name { flex-grow: 1; text-align: left; }
+.doc-actions button { background: none; border: none; cursor: pointer; font-size: 1.1em; margin-left: 8px; color: #6c757d; }
+.doc-actions button:hover { color: #d9534f; }
+.function-button-container { display: flex; align-items: center; gap: 5px; position: relative; }
+.function-button { flex-grow: 1; background-color: #fff; border: 1px solid #ccc; color: #333; padding: 10px; text-align: left; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+.function-button:hover { background-color: #f0f0f0; }
+.function-button.create-new { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
+.edit-button { background: none; border: none; cursor: pointer; padding: 5px; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); color: #aaa; }
+.edit-button:hover { color: #333; }
+.edit-button svg { width: 16px; height: 16px; }
