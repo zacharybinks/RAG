@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  backend:
+    build: ./rfp-rag-backend
+    ports:
+      - "8000:8000"
+    # Environment variables will be set in the Azure App Service configuration
+    # so we don't need to list them here.
+  frontend:
+    build: ./rfp-rag-frontend
+    ports:
+      - "80:80" # Expose port 80 for the web server
+    depends_on:
+      - backend
