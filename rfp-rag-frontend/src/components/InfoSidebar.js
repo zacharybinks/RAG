@@ -1,6 +1,6 @@
 /*
 -------------------------------------------------------------------
-File: src/components/InfoSidebar.js (Complete)
+File: src/components/InfoSidebar.js (Restored to Full Functionality)
 Description: The right sidebar for documents and settings.
 -------------------------------------------------------------------
 */
@@ -60,20 +60,21 @@ const InfoSidebar = ({ project }) => {
     const handleFileUpload = async () => {
         if (!selectedFile) return;
         setIsUploading(true);
+        setError(null);
         const formData = new FormData();
         formData.append('file', selectedFile);
 
-        console.log("--- [TEST] Attempting to upload to /upload-test/ endpoint. ---");
-
         try {
-            const response = await api.post(`/upload-test/`, formData);
+            // **RESTORED**: Pointing back to the original, full-featured endpoint
+            await api.post(`/rfps/${project.project_id}/upload/`, formData);
             
-            console.log("--- [SUCCESS] Received response from test endpoint:", response.data);
-            addNotification(`Test successful: ${response.data.info}`);
+            addNotification(`'${selectedFile.name}' uploaded successfully. Processing...`);
             setSelectedFile(null);
+            // Refresh the document list to show the new file
+            await fetchSidebarData();
         } catch (e) {
-            console.error("--- [FAILURE] Error during test upload:", e);
-            addNotification('Test upload failed. Check console and backend logs.', 'error');
+            console.error("--- [FAILURE] Error during upload:", e);
+            addNotification(e.response?.data?.detail || 'File upload failed.', 'error');
         } finally {
             setIsUploading(false);
         }
