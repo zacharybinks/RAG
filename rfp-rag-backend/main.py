@@ -291,11 +291,47 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
         query_text = prompt_function.prompt_text
         user_message_text = f"Executing function: {prompt_function.button_label}"
         retriever_k = 30
-        prompt_template = f"""{db_project.system_prompt}\n\nBased on the following context from a document, please fulfill the user's request.\n**CONTEXT:**\n{{context}}\n\n**REQUEST:**\n{{question}}\n\n**Comprehensive Answer (formatted in Markdown):**"""
+        prompt_template = f"""{db_project.system_prompt}
+
+You are an expert analyst working with document content. Based on the following context from the uploaded documents, provide a comprehensive and detailed response to the user's request.
+
+**DOCUMENT CONTEXT:**
+{{context}}
+
+**USER REQUEST:**
+{{question}}
+
+**INSTRUCTIONS:**
+- Provide a thorough, detailed analysis
+- Use proper Markdown formatting with headers, bullet points, and emphasis
+- Include specific details and examples from the documents
+- Structure your response with clear sections
+- Be comprehensive but well-organized
+- Use tables, lists, and formatting to enhance readability
+
+**COMPREHENSIVE RESPONSE:**"""
     elif request.query:
         query_text = request.query
         user_message_text = request.query
-        prompt_template = f"""{db_project.system_prompt}\n\nUse the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.\n**Format your answer using Markdown...**\n\nContext: {{context}}\n\nQuestion: {{question}}\nHelpful Answer:"""
+        prompt_template = f"""{db_project.system_prompt}
+
+You are a knowledgeable assistant with access to document content. Use the provided context to give a detailed, well-formatted response.
+
+**DOCUMENT CONTEXT:**
+{{context}}
+
+**QUESTION:**
+{{question}}
+
+**INSTRUCTIONS:**
+- Provide a comprehensive answer with specific details from the documents
+- Format your response using Markdown (headers, lists, emphasis, tables where appropriate)
+- If you don't know something, clearly state what information is missing
+- Structure your answer logically with clear sections
+- Include relevant examples and specifics from the context
+- Make your response detailed and informative
+
+**DETAILED ANSWER:**"""
     else:
         raise HTTPException(status_code=400, detail="Request must include either a 'query' or a 'prompt_function_id'.")
 
@@ -306,7 +342,12 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
         embeddings = OpenAIEmbeddings()
         vectordb = Chroma(persist_directory=DB_DIRECTORY, embedding_function=embeddings, collection_name=project_id)
         retriever = vectordb.as_retriever(search_kwargs={"k": retriever_k})
-        qa = ConversationalRetrievalChain.from_llm(llm=ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.2), retriever=retriever, combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT}, return_source_documents=True)
+        qa = ConversationalRetrievalChain.from_llm(
+            llm=ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.3), 
+            retriever=retriever, 
+            combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT}, 
+            return_source_documents=True
+        )
         result = qa.invoke({"question": query_text, "chat_history": chat_history_for_model})
         crud.create_chat_message(db, message=schemas.ChatMessageCreate(message_type="answer", text=result["answer"]), project_id=db_project.id)
         source_docs = [{"source": os.path.basename(doc.metadata.get("source", "N/A")), "page": doc.metadata.get("page", "N/A")} for doc in result["source_documents"]]
