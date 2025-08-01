@@ -274,7 +274,7 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
     prompt_template = ""
     query_text = ""
     user_message_text = ""
-    retriever_k = 3
+    retriever_k = 15
 
     if request.prompt_function_id:
         prompt_function = crud.get_prompt_function(db, function_id=request.prompt_function_id)
@@ -282,7 +282,7 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
             raise HTTPException(status_code=404, detail="Prompt function not found.")
         query_text = prompt_function.prompt_text
         user_message_text = f"Executing function: {prompt_function.button_label}"
-        retriever_k = 20
+        retriever_k = 30
         prompt_template = f"""{db_project.system_prompt}\n\nBased on the following context from a document, please fulfill the user's request.\n**CONTEXT:**\n{{context}}\n\n**REQUEST:**\n{{question}}\n\n**Comprehensive Answer (formatted in Markdown):**"""
     elif request.query:
         query_text = request.query
