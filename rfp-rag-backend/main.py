@@ -196,6 +196,13 @@ async def upload_to_project(project_id: str, file: UploadFile = File(...), db: S
             shutil.copyfileobj(file.file, file_object)
         print("--- [3] Local save successful.")
         
+        # Verify file was actually written
+        if os.path.exists(file_location):
+            file_size = os.path.getsize(file_location)
+            print(f"--- [DEBUG] File confirmed written: {file_location}, size: {file_size} bytes")
+        else:
+            print(f"--- [ERROR] File not found after write: {file_location}")
+        
         process_document(file_location, collection_name=project_id)
 
         print("--- [11] Entire upload and process workflow completed successfully.")
@@ -438,11 +445,23 @@ def test_storage():
         with open(test_file, "r") as f:
             content = f.read()
             
+        # Get mount info without _asdict()
+        try:
+            stat_info = os.statvfs(PROJECTS_DIRECTORY)
+            mount_info = {
+                "f_bavail": stat_info.f_bavail,
+                "f_bfree": stat_info.f_bfree,
+                "f_blocks": stat_info.f_blocks,
+                "f_bsize": stat_info.f_bsize
+            }
+        except:
+            mount_info = "Not available"
+            
         return {
             "write_success": True,
             "content": content,
             "file_exists": os.path.exists(test_file),
-            "mount_info": os.statvfs(PROJECTS_DIRECTORY)._asdict() if hasattr(os, 'statvfs') else "Not available"
+            "mount_info": mount_info
         }
     except Exception as e:
         return {
