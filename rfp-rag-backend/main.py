@@ -6,7 +6,7 @@ from datetime import timedelta
 # --- Third-Party Imports ---
 import chromadb
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ DB_DIRECTORY = "/tmp/chroma_db"
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
 
-app = FastAPI(title="RFP RAG System Backend - Simplified")
+app = FastAPI(title="RFP RAG System Main")
 api_app = FastAPI(title="RFP RAG System API")
 
 # --- CORS Configuration ---
@@ -98,7 +98,7 @@ def process_document(file_path: str, collection_name: str):
     return True
 
 # ==============================================================================
-# API ENDPOINTS
+# API ENDPOINTS (Mounted under /api)
 # ==============================================================================
 
 @api_app.post("/token", response_model=schemas.Token)
