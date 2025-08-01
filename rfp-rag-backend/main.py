@@ -53,7 +53,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=3600,
 )
+
+# Add this to increase FastAPI's upload limit
+@app.middleware("http")
+async def add_upload_size_limit(request, call_next):
+    request.scope["upload_max_size"] = 20 * 1024 * 1024  # 20MB
+    response = await call_next(request)
+    return response
 
 # ==============================================================================
 # HELPER FUNCTIONS & DEPENDENCIES
