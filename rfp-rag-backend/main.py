@@ -30,12 +30,36 @@ from database import SessionLocal
 # ==============================================================================
 load_dotenv()
 
-# --- App Setup ---
-# **CRITICAL FIX**: Use the /tmp directory which is always writable in a container environment
-PROJECTS_DIRECTORY = "/app/data/rfp_projects"
-DB_DIRECTORY = "/app/data/chroma_db"
+# Debug environment and paths
+print(f"--- [STARTUP DEBUG] Environment check:")
+print(f"--- [STARTUP DEBUG] PROJECTS_DIRECTORY env var: {os.getenv('PROJECTS_DIRECTORY')}")
+print(f"--- [STARTUP DEBUG] DB_DIRECTORY env var: {os.getenv('DB_DIRECTORY')}")
+
+# Remove the old directories to force using Azure File Share
+import shutil
+
+# Clean up old directories if they exist
+old_projects = "/app/rfp_projects"
+old_db = "/app/chroma_db"
+
+if os.path.exists(old_projects):
+    print(f"--- [CLEANUP] Removing old projects directory: {old_projects}")
+    shutil.rmtree(old_projects)
+
+if os.path.exists(old_db):
+    print(f"--- [CLEANUP] Removing old db directory: {old_db}")
+    shutil.rmtree(old_db)
+
+# Temporarily test with a simpler path
+PROJECTS_DIRECTORY = os.getenv("PROJECTS_DIRECTORY", "/data/rfp_projects")
+DB_DIRECTORY = os.getenv("DB_DIRECTORY", "/data/chroma_db")
+
+# Ensure directories exist
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
+
+print(f"--- [STARTUP DEBUG] Final PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
+print(f"--- [STARTUP DEBUG] Final DB_DIRECTORY: {DB_DIRECTORY}")
 
 app = FastAPI(title="RFP RAG System Backend - Simplified", root_path="/api")
 
@@ -81,6 +105,10 @@ def sanitize_name_for_directory(name: str) -> str:
 
 def process_document(file_path: str, collection_name: str):
     print(f"--- [5] Starting LangChain PDFLoader for file: {file_path}")
+    print(f"--- [DEBUG] PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
+    print(f"--- [DEBUG] DB_DIRECTORY: {DB_DIRECTORY}")
+    print(f"--- [DEBUG] File exists at path: {os.path.exists(file_path)}")
+    
     loader = PyPDFLoader(file_path)
     documents = loader.load()
     print(f"--- [6] PDF loaded successfully. Found {len(documents)} pages.")
@@ -149,13 +177,18 @@ def get_rfp_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_
 @app.post("/rfps/{project_id}/upload/")
 async def upload_to_project(project_id: str, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     print(f"--- [1] Upload endpoint initiated for project: {project_id}")
+    print(f"--- [DEBUG] PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
+    print(f"--- [DEBUG] Current working directory: {os.getcwd()}")
+    
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="RFP project not found.")
     
     project_path = os.path.join(PROJECTS_DIRECTORY, project_id)
+    print(f"--- [DEBUG] Project path: {project_path}")
     os.makedirs(project_path, exist_ok=True)
     file_location = os.path.join(project_path, file.filename)
+    print(f"--- [DEBUG] File will be saved to: {file_location}")
     
     try:
         print(f"--- [2] Saving {file.filename} to temp path: {file_location}")
@@ -372,3 +405,48 @@ def test_db_connection(db: Session = Depends(get_db)):
         print(f"!!! [FATAL UNKNOWN ERROR] An unexpected error occurred during DB test. !!!")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An unknown error occurred: {e}")
+
+@app.get("/debug/paths")
+def debug_paths():
+    import glob
+    return {
+        "projects_directory": PROJECTS_DIRECTORY,
+        "db_directory": DB_DIRECTORY,
+        "projects_exists": os.path.exists(PROJECTS_DIRECTORY),
+        "db_exists": os.path.exists(DB_DIRECTORY),
+        "current_working_directory": os.getcwd(),
+        "projects_contents": os.listdir(PROJECTS_DIRECTORY) if os.path.exists(PROJECTS_DIRECTORY) else "Directory does not exist",
+        "db_contents": os.listdir(DB_DIRECTORY) if os.path.exists(DB_DIRECTORY) else "Directory does not exist",
+        "all_files_in_app": glob.glob("/app/**/*", recursive=True)[:50],  # First 50 files
+        "environment_vars": {
+            "PROJECTS_DIRECTORY": os.getenv('PROJECTS_DIRECTORY'),
+            "DB_DIRECTORY": os.getenv('DB_DIRECTORY')
+        }
+    }
+
+@app.get("/debug/storage-test")
+def test_storage():
+    import time
+    test_file = os.path.join(PROJECTS_DIRECTORY, "test_persistence.txt")
+    
+    # Write a test file
+    try:
+        with open(test_file, "w") as f:
+            f.write(f"Test file created at {time.time()}")
+        
+        # Read it back
+        with open(test_file, "r") as f:
+            content = f.read()
+            
+        return {
+            "write_success": True,
+            "content": content,
+            "file_exists": os.path.exists(test_file),
+            "mount_info": os.statvfs(PROJECTS_DIRECTORY)._asdict() if hasattr(os, 'statvfs') else "Not available"
+        }
+    except Exception as e:
+        return {
+            "write_success": False,
+            "error": str(e),
+            "projects_dir": PROJECTS_DIRECTORY
+        }
