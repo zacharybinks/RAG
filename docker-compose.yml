@@ -4,6 +4,8 @@
         image: rfpragregistry.azurecr.io/backend:latest
         ports:
           - "8000:8000"
+        volumes:
+          - data:/app/data
         # Environment variables are set in the Azure App Service configuration
     
       frontend:
@@ -16,3 +18,5 @@
           - "80:80" # Azure App Service directs public traffic to port 80
         depends_on:
           - backend
+
+
