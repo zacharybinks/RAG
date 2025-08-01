@@ -32,8 +32,8 @@ load_dotenv()
 
 # --- App Setup ---
 # **CRITICAL FIX**: Use the /tmp directory which is always writable in a container environment
-PROJECTS_DIRECTORY = "/tmp/rfp_projects"
-DB_DIRECTORY = "/tmp/chroma_db"
+PROJECTS_DIRECTORY = "/app/data/rfp_projects"
+DB_DIRECTORY = "/app/data/chroma_db"
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
 
