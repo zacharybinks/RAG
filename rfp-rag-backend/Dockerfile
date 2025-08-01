@@ -13,7 +13,8 @@ WORKDIR /install
 
 # Copy only the requirements file and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# **FIX**: Added the --target=/install flag to ensure packages are installed in this directory
+RUN pip install --no-cache-dir -r requirements.txt --target=/install
 
 
 # --- STAGE 2: The Final Image ---

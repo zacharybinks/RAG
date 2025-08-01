@@ -7,7 +7,7 @@ const getApiBaseUrl = () => {
   if (window.config && window.config.API_URL) {
     return window.config.API_URL;
   }
-  return 'http://localhost:8000';
+  return '/api'; // Use nginx proxy instead of localhost
 };
 
 const api = axios.create({
