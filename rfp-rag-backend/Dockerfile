@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Command to run the application using Gunicorn
-# Increased timeout for processing larger files
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:8000", "--timeout", "300"]
+# Copy the new startup script and make it executable
+COPY run.sh /app/run.sh
+RUN chmod +x /app/run.sh
+
+# Use the script as the command to start the container
+CMD ["/app/run.sh"]
