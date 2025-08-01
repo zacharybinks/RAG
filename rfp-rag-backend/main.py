@@ -6,7 +6,7 @@ from datetime import timedelta
 # --- Third-Party Imports ---
 import chromadb
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -31,13 +31,13 @@ from database import SessionLocal
 load_dotenv()
 
 # --- App Setup ---
+# **CRITICAL FIX**: Use the /tmp directory which is always writable in a container environment
 PROJECTS_DIRECTORY = "/tmp/rfp_projects"
 DB_DIRECTORY = "/tmp/chroma_db"
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
 
-app = FastAPI(title="RFP RAG System Main")
-api_app = FastAPI(title="RFP RAG System API")
+app = FastAPI(title="RFP RAG System Backend - Simplified")
 
 # --- CORS Configuration ---
 origins = [
@@ -47,7 +47,7 @@ origins = [
     "https://rfp-rag-app-fgguhaezgmekczgg.eastus2-01.azurewebsites.net"
 ]
 
-api_app.add_middleware(
+app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
@@ -98,10 +98,10 @@ def process_document(file_path: str, collection_name: str):
     return True
 
 # ==============================================================================
-# API ENDPOINTS (Mounted under /api)
+# API ENDPOINTS
 # ==============================================================================
 
-@api_app.post("/token", response_model=schemas.Token)
+@app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = crud.get_user_by_username(db, username=form_data.username)
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
@@ -110,18 +110,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = auth.create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
 
-@api_app.post("/users/", response_model=schemas.User)
+@app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     return crud.create_user(db=db, user=user)
 
-@api_app.get("/users/me/", response_model=schemas.User)
+@app.get("/users/me/", response_model=schemas.User)
 async def read_users_me(current_user: models.User = Depends(auth.get_current_active_user)):
     return current_user
 
-@api_app.post("/rfps/", response_model=schemas.RfpProject, status_code=201)
+@app.post("/rfps/", response_model=schemas.RfpProject, status_code=201)
 def create_rfp_project(project: schemas.RfpProjectBase, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     project_id = sanitize_name_for_directory(f"{current_user.username}_{project.name}")
     db_project = crud.get_project_by_project_id(db, project_id=project_id)
@@ -134,11 +134,11 @@ def create_rfp_project(project: schemas.RfpProjectBase, db: Session = Depends(ge
     project_create = schemas.RfpProjectCreate(name=project.name, project_id=project_id)
     return crud.create_rfp_project(db=db, project=project_create, user_id=current_user.id)
 
-@api_app.get("/rfps/", response_model=List[schemas.RfpProject])
+@app.get("/rfps/", response_model=List[schemas.RfpProject])
 def get_rfp_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.get_projects_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
 
-@api_app.post("/rfps/{project_id}/upload/")
+@app.post("/rfps/{project_id}/upload/")
 async def upload_to_project(project_id: str, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     print(f"--- [1] Upload endpoint initiated for project: {project_id}")
     db_project = crud.get_project_by_project_id(db, project_id)
@@ -164,7 +164,7 @@ async def upload_to_project(project_id: str, file: UploadFile = File(...), db: S
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-@api_app.get("/rfps/{project_id}/documents/")
+@app.get("/rfps/{project_id}/documents/")
 async def get_project_documents(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
@@ -177,7 +177,7 @@ async def get_project_documents(project_id: str, db: Session = Depends(get_db), 
         documents = [{"name": f, "status": "Processed"} for f in files if os.path.isfile(os.path.join(project_path, f))]
     return documents
 
-@api_app.get("/rfps/{project_id}/documents/{document_name}")
+@app.get("/rfps/{project_id}/documents/{document_name}")
 async def download_document(project_id: str, document_name: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
@@ -188,7 +188,7 @@ async def download_document(project_id: str, document_name: str, db: Session = D
         raise HTTPException(status_code=404, detail="Document not found")
     return FileResponse(path=file_path, filename=document_name)
 
-@api_app.delete("/rfps/{project_id}/documents/{document_name}", status_code=204)
+@app.delete("/rfps/{project_id}/documents/{document_name}", status_code=204)
 async def delete_document(project_id: str, document_name: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
@@ -210,7 +210,7 @@ async def delete_document(project_id: str, document_name: str, db: Session = Dep
         raise HTTPException(status_code=404, detail="Document file not found")
     return
 
-@api_app.delete("/rfps/{project_id}", status_code=204)
+@app.delete("/rfps/{project_id}", status_code=204)
 def delete_project(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     deleted = crud.delete_project(db, project_id, user_id=current_user.id)
     if not deleted:
@@ -226,46 +226,46 @@ def delete_project(project_id: str, db: Session = Depends(get_db), current_user:
         shutil.rmtree(project_path)
     return
 
-@api_app.put("/rfps/{project_id}", response_model=schemas.RfpProject)
+@app.put("/rfps/{project_id}", response_model=schemas.RfpProject)
 def update_project(project_id: str, project_update: schemas.RfpProjectUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.update_project(db, project_id, project_update, user_id=current_user.id)
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
     return db_project
 
-@api_app.get("/rfps/{project_id}/settings", response_model=schemas.Settings)
+@app.get("/rfps/{project_id}/settings", response_model=schemas.Settings)
 def get_settings(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Project not found")
     return schemas.Settings(system_prompt=db_project.system_prompt)
 
-@api_app.post("/rfps/{project_id}/settings", response_model=schemas.RfpProject)
+@app.post("/rfps/{project_id}/settings", response_model=schemas.RfpProject)
 def update_settings(project_id: str, settings: schemas.Settings, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.update_settings(db, project_id, settings, user_id=current_user.id)
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
     return db_project
 
-@api_app.get("/prompt-functions/", response_model=List[schemas.PromptFunction])
+@app.get("/prompt-functions/", response_model=List[schemas.PromptFunction])
 def get_prompt_functions(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.get_prompt_functions(db=db)
 
-@api_app.post("/prompt-functions/", response_model=schemas.PromptFunction, status_code=201)
+@app.post("/prompt-functions/", response_model=schemas.PromptFunction, status_code=201)
 def create_prompt_function(function_data: schemas.PromptFunctionCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     existing = crud.get_prompt_function_by_name(db, function_name=function_data.function_name)
     if existing:
         raise HTTPException(status_code=400, detail="A function with this name already exists.")
     return crud.create_prompt_function(db, function=function_data)
 
-@api_app.put("/prompt-functions/{function_id}", response_model=schemas.PromptFunction)
+@app.put("/prompt-functions/{function_id}", response_model=schemas.PromptFunction)
 def update_prompt_function(function_id: int, function_update: schemas.PromptFunctionUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_function = crud.update_prompt_function(db, function_id, function_update)
     if not db_function:
         raise HTTPException(status_code=404, detail="Prompt function not found")
     return db_function
 
-@api_app.post("/rfps/{project_id}/query/")
+@app.post("/rfps/{project_id}/query/")
 async def query_project(project_id: str, request: schemas.QueryRequest, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
@@ -308,7 +308,7 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
              raise HTTPException(status_code=404, detail=f"No documents have been uploaded to '{project_id}' yet.")
         raise HTTPException(status_code=500, detail=f"An error occurred during query: {str(e)}")
 
-@api_app.get("/db-test")
+@app.get("/db-test")
 def test_db_connection(db: Session = Depends(get_db)):
     print("--- [DB TEST] Received request for database connection test. ---")
     try:
@@ -323,94 +323,3 @@ def test_db_connection(db: Session = Depends(get_db)):
         print(f"!!! [FATAL UNKNOWN ERROR] An unexpected error occurred during DB test. !!!")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An unknown error occurred: {e}")
-
-# Mount the API sub-application under the /api path
-app.mount("/api", api_app)
-
-@app.get("/")
-def read_root():
-    return {"message": "Health check successful"}
-
-# ==============================================================================
-# APPLICATION STARTUP EVENT
-# ==============================================================================
-
-def _seed_prompt_functions_logic(db: Session):
-    function_name = "Generate Requirements"
-    existing_function = crud.get_prompt_function_by_name(db, function_name=function_name)
-    if existing_function:
-        print(f"--- [Startup] '{function_name}' function already exists. Skipping seed.")
-        return
-
-    print(f"--- [Startup] Seeding '{function_name}' function... ---")
-    prompt_text = """User wants a comprehensive list of all the requirements for their proposal.
-Requirements should include the following categories and the response should be structured with a response for each category.
-
- Category 1: Performance & Operational Requirements (The "What")
- Category 2: Proposal Submission & Formatting Requirements (The "How to Submit")
- Category 3: Evaluation Criteria & Award Factors (The "How You'll Be Judged")
- Category 4: Key Personnel & Staffing Requirements (The "Who")
- Category 5: Cost & Pricing Requirements (The "How Much")
- Category 6: Contractual & Legal Requirements (The "Fine Print")
- Category 7: Other
-
-Category Definitions:
-Category 1: Performance & Operational Requirements (“The What”)
-Definition: These requirements define the actual scope of work the offeror is being asked to perform—usually pulled from the Statement of Work (SOW), Performance Work Statement (PWS), or Statement of Objectives (SOO). These describe what must be delivered, what standards must be met, and how success will be measured.
-AI Parsing Notes: Start with any “The contractor shall…” or “The CMF is responsible for…” phrasing. Look for functionally grouped tasks — e.g., “administering,” “facilitating,” “reporting,” or “evaluating.” Use structure or headers like: Task Areas, Work Breakdown, or Performance Objectives.
-Common Sub-Categories (Specific to CMFs): Consortium Administration & Governance, Member Management & Growth, Solicitation & Project Lifecycle Management, Financial & Transactional Management, Marketing, Communications & Collaboration, Reporting & Data Management.
-
-Category 2: Proposal Submission & Formatting Requirements (“The How to Submit”)
-Definition: These requirements dictate how the offeror must structure, format, and deliver their proposal. Failure to comply with these often results in automatic disqualification, regardless of technical merit.
-AI Parsing Notes: Look for specifics around font size, margins, volume structure, and delivery method. These will nearly always be found in Section L, or in attachments labeled “Instructions to Offerors” or “Submission Guidelines.”
-Includes: Formatting Requirements, Content & Structure Requirements, Submission Logistics, Administrative Submissions.
-
-Category 3: Evaluation Criteria & Award Factors (“The How You’ll Be Judged”)
-Definition: The government’s “grading rubric.” These criteria determine how proposals are scored, and ultimately, who is awarded the project. These are typically located in Section M, or in a stand-alone Evaluation Criteria section.
-AI Parsing Notes: Look for verbs like “will be evaluated based on…” or “the government will assess…” These may also appear as subfactors within larger volumes, such as Technical Volume instructions.
-Includes: Technical/Management Approach, Key Personnel Qualifications, Past Performance, Organizational Conflict of Interest (OCI), Cost/Price Reasonableness.
-
-Category 4: Key Personnel & Staffing Requirements (“The Who”)
-Definition: Defines who must be on the project team, their qualifications, and how that information must be presented. These are often separate from evaluation criteria because they’re baseline eligibility requirements—you must meet them to be considered.
-AI Parsing Notes: Look for “must include a Program Manager who…” or “key personnel shall have…” type statements. Section L typically has Resume/Staffing Plan requirements. SOW/PWS may define essential roles.
-Includes: Required Positions, Experience & Qualification Mandates, Resume Requirements.
-
-Category 5: Cost & Pricing Requirements (“The How Much”)
-Definition: This category captures how cost and pricing data must be presented, what information must be justified, and the acceptable formats for doing so. While often flexible under OTA, these requirements must still be met with precision.
-AI Parsing Notes: Pull from any cost model, pricing template, or Volume II (Cost Volume) instructions. Look for language like “Submit a Basis of Estimate…” or “Include direct and indirect labor rates…”
-Includes: Fee Structure & Model, Cost Breakdown & Detail, Financial Narrative.
-
-Category 6: Contractual & Legal Requirements (“The Fine Print”)
-Definition: These are the non-negotiable terms and conditions that the performer must accept to enter into an OTA agreement. Often found in the base OTA, Model Agreement, or Sections H & I, they include compliance terms and legal obligations.
-AI Parsing Notes: Use cues like “the contractor agrees to…,” “in accordance with FAR/DFARS…,” or “terms and conditions of this agreement include…”
-Includes: Period of Performance, Data & Intellectual Property Rights, Governance Clauses, Security Requirements.
-
-Category 7: Other
-Definition: Catch-all category for items that don't directly fall into Categories 1–6. Includes general background, definitions, references, or administrative material not requiring proposal response unless cited.
-AI Parsing Notes: Commonly drawn from the cover letter, background sections, and Q&A clarifications. Flag items here only if no action is required or if the language is purely contextual.
-Includes: Background/introduction language, Glossaries, acronyms, or boilerplate, References to documents not included in the package, Questions/answers that clarify but do not introduce new requirements."""
-    
-    function_data = schemas.PromptFunctionCreate(
-        module_name="Write",
-        function_name=function_name,
-        button_label="Generate Requirements",
-        description="Extracts and categorizes all proposal requirements from the uploaded documents into seven key areas.",
-        prompt_text=prompt_text
-    )
-    crud.create_prompt_function(db, function=function_data)
-
-@app.post("/seed-prompt-functions/", status_code=201)
-def seed_prompt_functions_endpoint(db: Session = Depends(get_db)):
-    _seed_prompt_functions_logic(db=db)
-    return {"message": "Seeding of prompt functions complete."}
-
-@app.on_event("startup")
-async def startup_event():
-    print("--- [Startup] Application is starting up. ---")
-    db = SessionLocal()
-    try:
-        print("--- [Startup] Seeding default prompt functions... ---")
-        _seed_prompt_functions_logic(db=db)
-    finally:
-        db.close()
-        print("--- [Startup] Database session closed. ---")

@@ -1,25 +1,18 @@
-services:
-  backend:
-    build: ./rfp-rag-backend
-    image: rfpragregistry.azurecr.io/backend:latest
-    ports:
-      - "8000:8000"
-    # This section tells the container which environment variables to
-    # expect from the Azure App Service configuration.
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - SECRET_KEY=${SECRET_KEY}
-      - ALGORITHM=${ALGORITHM}
-      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-
-  frontend:
-    build:
-      context: ./rfp-rag-frontend
-      args:
-        - REACT_APP_API_URL=${REACT_APP_API_URL}
-    image: rfpragregistry.azurecr.io/frontend:latest
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
+ services:
+      backend:
+        build: ./rfp-rag-backend
+        image: rfpragregistry.azurecr.io/backend:latest
+        ports:
+          - "8000:8000"
+        # Environment variables are set in the Azure App Service configuration
+    
+      frontend:
+        build:
+          context: ./rfp-rag-frontend
+          args:
+            - REACT_APP_API_URL=${REACT_APP_API_URL}
+        image: rfpragregistry.azurecr.io/frontend:latest
+        ports:
+          - "80:80" # Azure App Service directs public traffic to port 80
+        depends_on:
+          - backend
