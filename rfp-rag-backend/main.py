@@ -37,7 +37,7 @@ DB_DIRECTORY = "/tmp/chroma_db"
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
 
-app = FastAPI(title="RFP RAG System Backend - Simplified")
+app = FastAPI(title="RFP RAG System Backend - Simplified", root_path="/api")
 
 # --- CORS Configuration ---
 origins = [
