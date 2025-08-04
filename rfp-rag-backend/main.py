@@ -124,16 +124,9 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # --- Domain validation for user registration ---
-    # The username is an email (enforced by schemas.UserCreate), so we check its domain.
-    domain = user.username.split('@')[1]
-    allowed_domains = ["avatar-computing.com", "sossecinc.com"]
-    if domain.lower() not in allowed_domains:
-        raise HTTPException(status_code=400, detail="Registration is restricted. Please use an email from avatar-computing.com or sossecinc.com.")
-
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Username already registered")
     return crud.create_user(db=db, user=user)
 
 @app.get("/users/me/", response_model=schemas.User)
