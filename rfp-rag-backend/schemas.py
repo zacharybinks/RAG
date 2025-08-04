@@ -2,8 +2,8 @@
 # File: rfp-rag-backend/schemas.py (Complete & Corrected)
 # Description: Pydantic models for data validation and shaping.
 # -------------------------------------------------------------------
-from pydantic import BaseModel, Field
-from typing import List, Tuple, Optional
+from pydantic import BaseModel
+from typing import List, Optional, Tuple
 from datetime import datetime
 
 class UserBase(BaseModel):
