@@ -124,9 +124,16 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # --- Domain validation for user registration ---
+    # The username is an email (enforced by schemas.UserCreate), so we check its domain.
+    domain = user.username.split('@')[1]
+    allowed_domains = ["avatar-computing.com", "sossecinc.com"]
+    if domain.lower() not in allowed_domains:
+        raise HTTPException(status_code=400, detail="Registration is restricted. Please use an email from avatar-computing.com or sossecinc.com.")
+
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise HTTPException(status_code=400, detail="Email already registered")
     return crud.create_user(db=db, user=user)
 
 @app.get("/users/me/", response_model=schemas.User)
@@ -295,11 +302,56 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
         query_text = prompt_function.prompt_text
         user_message_text = f"Executing function: {prompt_function.button_label}"
         retriever_k = 30
-        prompt_template = f"""{db_project.system_prompt}\n\nBased on the following context from a document, please fulfill the user's request.\n**CONTEXT:**\n{{context}}\n\n**REQUEST:**\n{{question}}\n\n**Comprehensive Answer (formatted in Markdown):**"""
+        prompt_template = f"""{db_project.system_prompt}
+
+**ROLE:** You are an expert analyst with deep expertise in document analysis and comprehensive reporting.
+
+**CONTEXT FROM DOCUMENTS:**
+{{context}}
+
+**USER REQUEST:**
+{{question}}
+
+**INSTRUCTIONS FOR COMPREHENSIVE RESPONSE:**
+1. **Structure**: Use clear headings, subheadings, and logical organization
+2. **Detail Level**: Provide thorough, detailed analysis with specific examples and evidence
+3. **Formatting**: Use proper Markdown with:
+   - Headers (##, ###) for sections
+   - Bullet points and numbered lists
+   - **Bold** for emphasis and key points
+   - Tables when appropriate
+   - Code blocks for technical content
+4. **Length**: Aim for comprehensive coverage - be thorough rather than brief
+5. **Evidence**: Always cite specific information from the documents
+6. **Analysis**: Don't just summarize - provide insights, implications, and recommendations
+
+**COMPREHENSIVE RESPONSE:**"""
     elif request.query:
         query_text = request.query
         user_message_text = request.query
-        prompt_template = f"""{db_project.system_prompt}\n\nUse the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.\n**Format your answer using Markdown...**\n\nContext: {{context}}\n\nQuestion: {{question}}\nHelpful Answer:"""
+        prompt_template = f"""{db_project.system_prompt}
+
+**ROLE:** You are a knowledgeable assistant providing detailed, well-structured responses.
+
+**PREVIOUS CONVERSATION CONTEXT:**
+{{chat_history}}
+
+**RELEVANT DOCUMENT CONTEXT:**
+{{context}}
+
+**CURRENT QUESTION:**
+{{question}}
+
+**RESPONSE GUIDELINES:**
+- Provide comprehensive, detailed answers
+- Use proper Markdown formatting with headers, lists, and emphasis
+- Reference previous conversation when relevant
+- Include specific details and examples from the documents
+- Structure your response with clear sections
+- Be thorough and informative rather than brief
+- Use tables, bullet points, and formatting to enhance readability
+
+**DETAILED RESPONSE:**"""
     else:
         raise HTTPException(status_code=400, detail="Request must include either a 'query' or a 'prompt_function_id'.")
 
@@ -311,7 +363,7 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
         vectordb = Chroma(persist_directory=DB_DIRECTORY, embedding_function=embeddings, collection_name=project_id)
         retriever = vectordb.as_retriever(search_kwargs={"k": retriever_k})
         qa = ConversationalRetrievalChain.from_llm(
-            llm=ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.3), 
+            llm=ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.1),  # Changed to GPT-4 and lower temp
             retriever=retriever, 
             combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT}, 
             return_source_documents=True
