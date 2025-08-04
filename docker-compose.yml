@@ -1,5 +1,5 @@
 version: '3.8'
-
+#THIS FILE DOES NOT FUNCTION NATIVELY - COPY INTO DEPLOYMENT CONFIG ON AZURE
 services:
   backend:
     build: ./rfp-rag-backend
