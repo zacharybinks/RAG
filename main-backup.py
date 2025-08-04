@@ -30,26 +30,42 @@ from database import SessionLocal
 # ==============================================================================
 load_dotenv()
 
-# --- Environment Configuration ---
-APP_ENV = os.getenv("APP_ENV", "development")
+# Debug environment and paths
+print(f"--- [STARTUP DEBUG] Environment check:")
+print(f"--- [STARTUP DEBUG] PROJECTS_DIRECTORY env var: {os.getenv('PROJECTS_DIRECTORY')}")
+print(f"--- [STARTUP DEBUG] DB_DIRECTORY env var: {os.getenv('DB_DIRECTORY')}")
 
-# --- App Setup ---
-# **FIX**: Reverted to the original local directory paths for development fallback.
-PROJECTS_DIRECTORY = os.getenv("PROJECTS_DIRECTORY", "./rfp_projects")
-DB_DIRECTORY = os.getenv("DB_DIRECTORY", "./chroma_db")
+# Remove the old directories to force using Azure File Share
+import shutil
 
-print(f"--- [Startup] Running in {APP_ENV} mode.")
-print(f"--- [Startup] Using PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
-print(f"--- [Startup] Using DB_DIRECTORY: {DB_DIRECTORY}")
+# Clean up old directories if they exist
+old_projects = "/app/rfp_projects"
+old_db = "/app/chroma_db"
+
+if os.path.exists(old_projects):
+    print(f"--- [CLEANUP] Removing old projects directory: {old_projects}")
+    shutil.rmtree(old_projects)
+else:
+    print(f"--- [CLEANUP] Old projects directory does not exist: {old_projects}")
+
+if os.path.exists(old_db):
+    print(f"--- [CLEANUP] Removing old db directory: {old_db}")
+    shutil.rmtree(old_db)
+else:
+    print(f"--- [CLEANUP] Old db directory does not exist: {old_db}")
+
+# Use Azure App Service's standard mount path
+PROJECTS_DIRECTORY = "/home/data/rfp_projects"
+DB_DIRECTORY = "/home/data/chroma_db"
+
+# Ensure directories exist
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
 
-# **FIX**: Conditionally set the root_path for the API.
-# This allows the same codebase to work locally (no prefix) and in production (with /api prefix).
-api_root_path = "/api" if APP_ENV == "production" else ""
+print(f"--- [STARTUP DEBUG] Final PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
+print(f"--- [STARTUP DEBUG] Final DB_DIRECTORY: {DB_DIRECTORY}")
 
-app = FastAPI(title="RFP RAG System Backend", root_path=api_root_path)
-
+app = FastAPI(title="RFP RAG System Backend - Simplified", root_path="/api")
 
 # --- CORS Configuration ---
 origins = [
@@ -65,7 +81,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=3600,
 )
+
+# Add this to increase FastAPI's upload limit
+@app.middleware("http")
+async def add_upload_size_limit(request, call_next):
+    request.scope["upload_max_size"] = 20 * 1024 * 1024  # 20MB
+    response = await call_next(request)
+    return response
 
 # ==============================================================================
 # HELPER FUNCTIONS & DEPENDENCIES
@@ -85,6 +109,10 @@ def sanitize_name_for_directory(name: str) -> str:
 
 def process_document(file_path: str, collection_name: str):
     print(f"--- [5] Starting LangChain PDFLoader for file: {file_path}")
+    print(f"--- [DEBUG] PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
+    print(f"--- [DEBUG] DB_DIRECTORY: {DB_DIRECTORY}")
+    print(f"--- [DEBUG] File exists at path: {os.path.exists(file_path)}")
+    
     loader = PyPDFLoader(file_path)
     documents = loader.load()
     print(f"--- [6] PDF loaded successfully. Found {len(documents)} pages.")
@@ -97,7 +125,7 @@ def process_document(file_path: str, collection_name: str):
     texts = text_splitter.split_documents(documents)
     print(f"--- [8] Document split into {len(texts)} chunks.")
     
-    print(f"--- [9] Initializing embeddings and ChromaDB at: {DB_DIRECTORY}")
+    print("--- [9] Initializing embeddings and ChromaDB...")
     embeddings = OpenAIEmbeddings()
     vectordb = Chroma.from_documents(
         documents=texts, 
@@ -153,19 +181,31 @@ def get_rfp_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_
 @app.post("/rfps/{project_id}/upload/")
 async def upload_to_project(project_id: str, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     print(f"--- [1] Upload endpoint initiated for project: {project_id}")
+    print(f"--- [DEBUG] PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
+    print(f"--- [DEBUG] Current working directory: {os.getcwd()}")
+    
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="RFP project not found.")
     
     project_path = os.path.join(PROJECTS_DIRECTORY, project_id)
+    print(f"--- [DEBUG] Project path: {project_path}")
     os.makedirs(project_path, exist_ok=True)
     file_location = os.path.join(project_path, file.filename)
+    print(f"--- [DEBUG] File will be saved to: {file_location}")
     
     try:
-        print(f"--- [2] Saving {file.filename} to path: {file_location}")
+        print(f"--- [2] Saving {file.filename} to temp path: {file_location}")
         with open(file_location, "wb+") as file_object:
             shutil.copyfileobj(file.file, file_object)
-        print("--- [3] File save successful.")
+        print("--- [3] Local save successful.")
+        
+        # Verify file was actually written
+        if os.path.exists(file_location):
+            file_size = os.path.getsize(file_location)
+            print(f"--- [DEBUG] File confirmed written: {file_location}, size: {file_size} bytes")
+        else:
+            print(f"--- [ERROR] File not found after write: {file_location}")
         
         process_document(file_location, collection_name=project_id)
 
@@ -295,11 +335,47 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
         query_text = prompt_function.prompt_text
         user_message_text = f"Executing function: {prompt_function.button_label}"
         retriever_k = 30
-        prompt_template = f"""{db_project.system_prompt}\n\nBased on the following context from a document, please fulfill the user's request.\n**CONTEXT:**\n{{context}}\n\n**REQUEST:**\n{{question}}\n\n**Comprehensive Answer (formatted in Markdown):**"""
+        prompt_template = f"""{db_project.system_prompt}
+
+You are an expert analyst working with document content. Based on the following context from the uploaded documents, provide a comprehensive and detailed response to the user's request.
+
+**DOCUMENT CONTEXT:**
+{{context}}
+
+**USER REQUEST:**
+{{question}}
+
+**INSTRUCTIONS:**
+- Provide a thorough, detailed analysis
+- Use proper Markdown formatting with headers, bullet points, and emphasis
+- Include specific details and examples from the documents
+- Structure your response with clear sections
+- Be comprehensive but well-organized
+- Use tables, lists, and formatting to enhance readability
+
+**COMPREHENSIVE RESPONSE:**"""
     elif request.query:
         query_text = request.query
         user_message_text = request.query
-        prompt_template = f"""{db_project.system_prompt}\n\nUse the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.\n**Format your answer using Markdown...**\n\nContext: {{context}}\n\nQuestion: {{question}}\nHelpful Answer:"""
+        prompt_template = f"""{db_project.system_prompt}
+
+You are a knowledgeable assistant with access to document content. Use the provided context to give a detailed, well-formatted response.
+
+**DOCUMENT CONTEXT:**
+{{context}}
+
+**QUESTION:**
+{{question}}
+
+**INSTRUCTIONS:**
+- Provide a comprehensive answer with specific details from the documents
+- Format your response using Markdown (headers, lists, emphasis, tables where appropriate)
+- If you don't know something, clearly state what information is missing
+- Structure your answer logically with clear sections
+- Include relevant examples and specifics from the context
+- Make your response detailed and informative
+
+**DETAILED ANSWER:**"""
     else:
         raise HTTPException(status_code=400, detail="Request must include either a 'query' or a 'prompt_function_id'.")
 
@@ -341,86 +417,112 @@ def test_db_connection(db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An unknown error occurred: {e}")
 
-# ==============================================================================
-# APPLICATION STARTUP EVENT
-# ==============================================================================
+@app.get("/debug/paths")
+def debug_paths():
+    import glob
+    return {
+        "projects_directory": PROJECTS_DIRECTORY,
+        "db_directory": DB_DIRECTORY,
+        "projects_exists": os.path.exists(PROJECTS_DIRECTORY),
+        "db_exists": os.path.exists(DB_DIRECTORY),
+        "current_working_directory": os.getcwd(),
+        "projects_contents": os.listdir(PROJECTS_DIRECTORY) if os.path.exists(PROJECTS_DIRECTORY) else "Directory does not exist",
+        "db_contents": os.listdir(DB_DIRECTORY) if os.path.exists(DB_DIRECTORY) else "Directory does not exist",
+        "all_files_in_app": glob.glob("/app/**/*", recursive=True)[:50],  # First 50 files
+        "environment_vars": {
+            "PROJECTS_DIRECTORY": os.getenv('PROJECTS_DIRECTORY'),
+            "DB_DIRECTORY": os.getenv('DB_DIRECTORY')
+        }
+    }
 
-def _seed_prompt_functions_logic(db: Session):
-    function_name = "Generate Requirements"
-    existing_function = crud.get_prompt_function_by_name(db, function_name=function_name)
-    if existing_function:
-        print(f"--- [Startup] '{function_name}' function already exists. Skipping seed.")
-        return
-
-    print(f"--- [Startup] Seeding '{function_name}' function... ---")
-    prompt_text = """User wants a comprehensive list of all the requirements for their proposal.
-Requirements should include the following categories and the response should be structured with a response for each category.
-
- Category 1: Performance & Operational Requirements (The "What")
- Category 2: Proposal Submission & Formatting Requirements (The "How to Submit")
- Category 3: Evaluation Criteria & Award Factors (The "How You'll Be Judged")
- Category 4: Key Personnel & Staffing Requirements (The "Who")
- Category 5: Cost & Pricing Requirements (The "How Much")
- Category 6: Contractual & Legal Requirements (The "Fine Print")
- Category 7: Other
-
-Category Definitions:
-Category 1: Performance & Operational Requirements (“The What”)
-Definition: These requirements define the actual scope of work the offeror is being asked to perform—usually pulled from the Statement of Work (SOW), Performance Work Statement (PWS), or Statement of Objectives (SOO). These describe what must be delivered, what standards must be met, and how success will be measured.
-AI Parsing Notes: Start with any “The contractor shall…” or “The CMF is responsible for…” phrasing. Look for functionally grouped tasks — e.g., “administering,” “facilitating,” “reporting,” or “evaluating.” Use structure or headers like: Task Areas, Work Breakdown, or Performance Objectives.
-Common Sub-Categories (Specific to CMFs): Consortium Administration & Governance, Member Management & Growth, Solicitation & Project Lifecycle Management, Financial & Transactional Management, Marketing, Communications & Collaboration, Reporting & Data Management.
-
-Category 2: Proposal Submission & Formatting Requirements (“The How to Submit”)
-Definition: These requirements dictate how the offeror must structure, format, and deliver their proposal. Failure to comply with these often results in automatic disqualification, regardless of technical merit.
-AI Parsing Notes: Look for specifics around font size, margins, volume structure, and delivery method. These will nearly always be found in Section L, or in attachments labeled “Instructions to Offerors” or “Submission Guidelines.”
-Includes: Formatting Requirements, Content & Structure Requirements, Submission Logistics, Administrative Submissions.
-
-Category 3: Evaluation Criteria & Award Factors (“The How You’ll Be Judged”)
-Definition: The government’s “grading rubric.” These criteria determine how proposals are scored, and ultimately, who is awarded the project. These are typically located in Section M, or in a stand-alone Evaluation Criteria section.
-AI Parsing Notes: Look for verbs like “will be evaluated based on…” or “the government will assess…” These may also appear as subfactors within larger volumes, such as Technical Volume instructions.
-Includes: Technical/Management Approach, Key Personnel Qualifications, Past Performance, Organizational Conflict of Interest (OCI), Cost/Price Reasonableness.
-
-Category 4: Key Personnel & Staffing Requirements (“The Who”)
-Definition: Defines who must be on the project team, their qualifications, and how that information must be presented. These are often separate from evaluation criteria because they’re baseline eligibility requirements—you must meet them to be considered.
-AI Parsing Notes: Look for “must include a Program Manager who…” or “key personnel shall have…” type statements. Section L typically has Resume/Staffing Plan requirements. SOW/PWS may define essential roles.
-Includes: Required Positions, Experience & Qualification Mandates, Resume Requirements.
-
-Category 5: Cost & Pricing Requirements (“The How Much”)
-Definition: This category captures how cost and pricing data must be presented, what information must be justified, and the acceptable formats for doing so. While often flexible under OTA, these requirements must still be met with precision.
-AI Parsing Notes: Pull from any cost model, pricing template, or Volume II (Cost Volume) instructions. Look for language like “Submit a Basis of Estimate…” or “Include direct and indirect labor rates…”
-Includes: Fee Structure & Model, Cost Breakdown & Detail, Financial Narrative.
-
-Category 6: Contractual & Legal Requirements (“The Fine Print”)
-Definition: These are the non-negotiable terms and conditions that the performer must accept to enter into an OTA agreement. Often found in the base OTA, Model Agreement, or Sections H & I, they include compliance terms and legal obligations.
-AI Parsing Notes: Use cues like “the contractor agrees to…,” “in accordance with FAR/DFARS…,” or “terms and conditions of this agreement include…”
-Includes: Period of Performance, Data & Intellectual Property Rights, Governance Clauses, Security Requirements.
-
-Category 7: Other
-Definition: Catch-all category for items that don't directly fall into Categories 1–6. Includes general background, definitions, references, or administrative material not requiring proposal response unless cited.
-AI Parsing Notes: Commonly drawn from the cover letter, background sections, and Q&A clarifications. Flag items here only if no action is required or if the language is purely contextual.
-Includes: Background/introduction language, Glossaries, acronyms, or boilerplate, References to documents not included in the package, Questions/answers that clarify but do not introduce new requirements."""
+@app.get("/debug/storage-test")
+def test_storage():
+    import time
+    test_file = os.path.join(PROJECTS_DIRECTORY, "test_persistence.txt")
     
-    function_data = schemas.PromptFunctionCreate(
-        module_name="Write",
-        function_name=function_name,
-        button_label="Generate Requirements",
-        description="Extracts and categorizes all proposal requirements from the uploaded documents into seven key areas.",
-        prompt_text=prompt_text
-    )
-    crud.create_prompt_function(db, function=function_data)
-
-@app.post("/seed-prompt-functions/", status_code=201)
-def seed_prompt_functions_endpoint(db: Session = Depends(get_db)):
-    _seed_prompt_functions_logic(db=db)
-    return {"message": "Seeding of prompt functions complete."}
-
-@app.on_event("startup")
-async def startup_event():
-    print("--- [Startup] Application is starting up. ---")
-    db = SessionLocal()
+    # Write a test file
     try:
-        print("--- [Startup] Seeding default prompt functions... ---")
-        _seed_prompt_functions_logic(db=db)
-    finally:
-        db.close()
-        print("--- [Startup] Database session closed. ---")
+        with open(test_file, "w") as f:
+            f.write(f"Test file created at {time.time()}")
+        
+        # Read it back
+        with open(test_file, "r") as f:
+            content = f.read()
+            
+        # Get mount info without _asdict()
+        try:
+            stat_info = os.statvfs(PROJECTS_DIRECTORY)
+            mount_info = {
+                "f_bavail": stat_info.f_bavail,
+                "f_bfree": stat_info.f_bfree,
+                "f_blocks": stat_info.f_blocks,
+                "f_bsize": stat_info.f_bsize
+            }
+        except:
+            mount_info = "Not available"
+            
+        return {
+            "write_success": True,
+            "content": content,
+            "file_exists": os.path.exists(test_file),
+            "mount_info": mount_info
+        }
+    except Exception as e:
+        return {
+            "write_success": False,
+            "error": str(e),
+            "projects_dir": PROJECTS_DIRECTORY
+        }
+
+@app.get("/debug/working-mount-test")
+def test_working_mount():
+    import time
+    test_file = "/home/data/persistence_test.txt"
+    
+    try:
+        with open(test_file, "w") as f:
+            f.write(f"Working mount test at {time.time()}")
+        
+        return {
+            "mount_path": "/home/data",
+            "test_file_exists": os.path.exists(test_file),
+            "home_data_contents": os.listdir("/home/data"),
+            "projects_contents": os.listdir("/home/data/rfp_projects") if os.path.exists("/home/data/rfp_projects") else [],
+            "db_contents": os.listdir("/home/data/chroma_db") if os.path.exists("/home/data/chroma_db") else []
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug/mount-info")
+def check_mount_info():
+    import subprocess
+    import os
+    
+    try:
+        # Check mount points
+        mount_result = subprocess.run(['mount'], capture_output=True, text=True)
+        mounts = mount_result.stdout
+        
+        # Check what's in common mount locations
+        locations_to_check = ["/home", "/home/data", "/mnt", "/app"]
+        location_info = {}
+        
+        for loc in locations_to_check:
+            if os.path.exists(loc):
+                try:
+                    location_info[loc] = os.listdir(loc)
+                except:
+                    location_info[loc] = "Permission denied"
+            else:
+                location_info[loc] = "Does not exist"
+        
+        return {
+            "mount_output": mounts,
+            "locations": location_info,
+            "environment_vars": {
+                "PROJECTS_DIRECTORY": os.getenv('PROJECTS_DIRECTORY'),
+                "DB_DIRECTORY": os.getenv('DB_DIRECTORY')
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
