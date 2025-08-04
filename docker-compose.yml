@@ -1,22 +1,25 @@
- services:
-      backend:
-        build: ./rfp-rag-backend
-        image: rfpragregistry.azurecr.io/backend:latest
-        ports:
-          - "8000:8000"
-        volumes:
-          - data:/app/data
-        # Environment variables are set in the Azure App Service configuration
-    
-      frontend:
-        build:
-          context: ./rfp-rag-frontend
-          args:
-            - REACT_APP_API_URL=${REACT_APP_API_URL}
-        image: rfpragregistry.azurecr.io/frontend:latest
-        ports:
-          - "80:80" # Azure App Service directs public traffic to port 80
-        depends_on:
-          - backend
+version: '3.8'
 
+services:
+  backend:
+    build: ./rfp-rag-backend
+    image: rfpragregistry.azurecr.io/backend:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - data:/home/data
+    # Environment variables are set in the Azure App Service configuration
 
+  frontend:
+    build:
+      context: ./rfp-rag-frontend
+      args:
+        - REACT_APP_API_URL=${REACT_APP_API_URL:-/api}
+    image: rfpragregistry.azurecr.io/frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  data:

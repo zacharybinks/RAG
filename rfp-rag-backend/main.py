@@ -45,14 +45,18 @@ old_db = "/app/chroma_db"
 if os.path.exists(old_projects):
     print(f"--- [CLEANUP] Removing old projects directory: {old_projects}")
     shutil.rmtree(old_projects)
+else:
+    print(f"--- [CLEANUP] Old projects directory does not exist: {old_projects}")
 
 if os.path.exists(old_db):
     print(f"--- [CLEANUP] Removing old db directory: {old_db}")
     shutil.rmtree(old_db)
+else:
+    print(f"--- [CLEANUP] Old db directory does not exist: {old_db}")
 
-# Temporarily test with a simpler path
-PROJECTS_DIRECTORY = os.getenv("PROJECTS_DIRECTORY", "/data/rfp_projects")
-DB_DIRECTORY = os.getenv("DB_DIRECTORY", "/data/chroma_db")
+# Use Azure App Service's standard mount path
+PROJECTS_DIRECTORY = "/home/data/rfp_projects"
+DB_DIRECTORY = "/home/data/chroma_db"
 
 # Ensure directories exist
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
@@ -469,3 +473,56 @@ def test_storage():
             "error": str(e),
             "projects_dir": PROJECTS_DIRECTORY
         }
+
+@app.get("/debug/working-mount-test")
+def test_working_mount():
+    import time
+    test_file = "/home/data/persistence_test.txt"
+    
+    try:
+        with open(test_file, "w") as f:
+            f.write(f"Working mount test at {time.time()}")
+        
+        return {
+            "mount_path": "/home/data",
+            "test_file_exists": os.path.exists(test_file),
+            "home_data_contents": os.listdir("/home/data"),
+            "projects_contents": os.listdir("/home/data/rfp_projects") if os.path.exists("/home/data/rfp_projects") else [],
+            "db_contents": os.listdir("/home/data/chroma_db") if os.path.exists("/home/data/chroma_db") else []
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug/mount-info")
+def check_mount_info():
+    import subprocess
+    import os
+    
+    try:
+        # Check mount points
+        mount_result = subprocess.run(['mount'], capture_output=True, text=True)
+        mounts = mount_result.stdout
+        
+        # Check what's in common mount locations
+        locations_to_check = ["/home", "/home/data", "/mnt", "/app"]
+        location_info = {}
+        
+        for loc in locations_to_check:
+            if os.path.exists(loc):
+                try:
+                    location_info[loc] = os.listdir(loc)
+                except:
+                    location_info[loc] = "Permission denied"
+            else:
+                location_info[loc] = "Does not exist"
+        
+        return {
+            "mount_output": mounts,
+            "locations": location_info,
+            "environment_vars": {
+                "PROJECTS_DIRECTORY": os.getenv('PROJECTS_DIRECTORY'),
+                "DB_DIRECTORY": os.getenv('DB_DIRECTORY')
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
