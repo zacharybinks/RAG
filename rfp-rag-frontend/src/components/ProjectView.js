@@ -1,13 +1,9 @@
-/*
--------------------------------------------------------------------
-File: src/components/ProjectView.js (Corrected)
-Description: This is the refactored version that only handles chat.
--------------------------------------------------------------------
-*/
+// rfp-rag-frontend/src/components/ProjectView.js
+
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 
-const ProjectView = ({ chatHistory, isQuerying, onQuerySubmit }) => {
+const ProjectView = ({ chatHistory, isQuerying, onQuerySubmit, useKnowledgeBase, setUseKnowledgeBase }) => {
     const [query, setQuery] = useState('');
     const [expandedSources, setExpandedSources] = useState({});
     const chatEndRef = useRef(null);
@@ -62,6 +58,15 @@ const ProjectView = ({ chatHistory, isQuerying, onQuerySubmit }) => {
                 ))}
                 {isQuerying && <div className="chat-message answer typing">Thinking...</div>}
                 <div ref={chatEndRef} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0 15px' }}>
+                <input 
+                    type="checkbox" 
+                    id="use-kb" 
+                    checked={useKnowledgeBase} 
+                    onChange={(e) => setUseKnowledgeBase(e.target.checked)} 
+                />
+                <label htmlFor="use-kb" style={{ marginLeft: '8px' }}>Use Knowledge Base</label>
             </div>
             <form onSubmit={handleSubmit} className="prompt-form">
                 <textarea 

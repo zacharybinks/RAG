@@ -1,13 +1,10 @@
-/*
--------------------------------------------------------------------
-File: src/components/Header.js (Updated)
--------------------------------------------------------------------
-*/
+// rfp-rag-frontend/src/components/Header.js
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const Header = () => {
-    const { user, logout } = useAuth();
+const Header = ({ onKnowledgeBaseClick }) => {
+    const { user, logout, setView } = useAuth();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
 
@@ -15,6 +12,10 @@ const Header = () => {
         logout();
         setDropdownOpen(false);
     };
+
+    const handleDashboardClick = () => {
+        setView('dashboard');
+    }
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -29,9 +30,8 @@ const Header = () => {
     return (
         <header className="App-header">
             <div className="header-content">
-                <div className="logo-container">
+                <div className="logo-container" onClick={handleDashboardClick} style={{ cursor: 'pointer' }}>
                     <img src="/scaira-small.png" alt="Logo" />
-                    
                 </div>
                 {user && (
                     <div className="user-menu" ref={dropdownRef}>
@@ -40,6 +40,7 @@ const Header = () => {
                         </button>
                         {dropdownOpen && (
                             <div className="dropdown-menu">
+                                <button onClick={onKnowledgeBaseClick}>Knowledge Base</button>
                                 <button onClick={handleLogout}>Logout</button>
                             </div>
                         )}

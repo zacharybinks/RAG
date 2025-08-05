@@ -1,9 +1,5 @@
-/*
--------------------------------------------------------------------
-File: src/components/InfoSidebar.js (Restored to Full Functionality)
-Description: The right sidebar for documents and settings.
--------------------------------------------------------------------
-*/
+// rfp-rag-frontend/src/components/InfoSidebar.js
+
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useNotification } from '../context/NotificationContext';
@@ -23,6 +19,10 @@ const InfoSidebar = ({ project }) => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [systemPrompt, setSystemPrompt] = useState('');
+    const [modelName, setModelName] = useState('gpt-3.5-turbo');
+    const [temperature, setTemperature] = useState(0.7);
+    const [contextAmount, setContextAmount] = useState(15);
+    const [contextSize, setContextSize] = useState('medium');
     const [isSavingSettings, setIsSavingSettings] = useState(false);
     const [documents, setDocuments] = useState([]);
     const [error, setError] = useState(null);
@@ -32,6 +32,10 @@ const InfoSidebar = ({ project }) => {
         try {
             const settingsRes = await api.get(`/rfps/${project.project_id}/settings`);
             setSystemPrompt(settingsRes.data.system_prompt);
+            setModelName(settingsRes.data.model_name);
+            setTemperature(settingsRes.data.temperature);
+            setContextAmount(settingsRes.data.context_amount);
+            setContextSize(settingsRes.data.context_size);
             const docsRes = await api.get(`/rfps/${project.project_id}/documents/`);
             setDocuments(docsRes.data);
         } catch (e) {
@@ -46,7 +50,13 @@ const InfoSidebar = ({ project }) => {
     const handleSaveSettings = async () => {
         setIsSavingSettings(true);
         try {
-            await api.post(`/rfps/${project.project_id}/settings`, { system_prompt: systemPrompt });
+            await api.post(`/rfps/${project.project_id}/settings`, { 
+                system_prompt: systemPrompt,
+                model_name: modelName,
+                temperature: temperature,
+                context_amount: contextAmount,
+                context_size: contextSize
+            });
             addNotification('Settings saved successfully!');
         } catch (e) {
             addNotification('Failed to save settings.', 'error');
@@ -65,12 +75,10 @@ const InfoSidebar = ({ project }) => {
         formData.append('file', selectedFile);
 
         try {
-            // **RESTORED**: Pointing back to the original, full-featured endpoint
             await api.post(`/rfps/${project.project_id}/upload/`, formData);
             
             addNotification(`'${selectedFile.name}' uploaded successfully. Processing...`);
             setSelectedFile(null);
-            // Refresh the document list to show the new file
             await fetchSidebarData();
         } catch (e) {
             console.error("--- [FAILURE] Error during upload:", e);
@@ -127,8 +135,22 @@ const InfoSidebar = ({ project }) => {
                     )}
                     {activeTab === 'settings' && (
                         <div className="settings-area">
-                            <p>Set the AI's persona for this project.</p>
+                            <label>System Prompt</label>
                             <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows="10"/>
+                            
+                            <label>Model Name</label>
+                            <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} />
+
+                            <label>Temperature: {temperature}</label>
+                            <input type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value))} />
+
+                            <label>Context Size</label>
+                            <select value={contextSize} onChange={(e) => setContextSize(e.target.value)}>
+                                <option value="low">Low (5 docs)</option>
+                                <option value="medium">Medium (10 docs)</option>
+                                <option value="high">High (15 docs)</option>
+                            </select>
+
                             <button onClick={handleSaveSettings} disabled={isSavingSettings}>{isSavingSettings ? 'Saving...' : 'Save Settings'}</button>
                         </div>
                     )}

@@ -1,13 +1,11 @@
-# -------------------------------------------------------------------
-# File: rfp-rag-backend/schemas.py (Complete & Corrected)
-# Description: Pydantic models for data validation and shaping.
-# -------------------------------------------------------------------
-from pydantic import BaseModel
-from typing import List, Optional, Tuple
+# rfp-rag-backend/schemas.py
+
+from pydantic import BaseModel, Field, EmailStr
+from typing import List, Tuple, Optional, Literal
 from datetime import datetime
 
 class UserBase(BaseModel):
-    username: str
+    username: EmailStr
 class UserCreate(UserBase):
     password: str
 class User(UserBase):
@@ -43,6 +41,9 @@ class RfpProject(RfpProjectBase):
     project_id: str
     system_prompt: str
     owner_id: int
+    model_name: str
+    temperature: float
+    context_amount: int
     chat_messages: List[ChatMessage] = []
     class Config:
         from_attributes = True
@@ -66,6 +67,23 @@ class PromptFunction(PromptFunctionBase):
 class QueryRequest(BaseModel):
     query: Optional[str] = None
     prompt_function_id: Optional[int] = None
+    use_knowledge_base: bool = False
 
 class Settings(BaseModel):
     system_prompt: str
+    model_name: str
+    temperature: float
+    context_amount: int
+    context_size: Literal['low', 'medium', 'high'] = 'medium'
+
+class KnowledgeBaseDocumentBase(BaseModel):
+    document_name: str
+    description: Optional[str] = None
+
+class KnowledgeBaseDocumentCreate(KnowledgeBaseDocumentBase):
+    pass
+
+class KnowledgeBaseDocument(KnowledgeBaseDocumentBase):
+    id: int
+    class Config:
+        from_attributes = True

@@ -1,6 +1,8 @@
 chroma_db/*
 rfp_projects/*
+knowledge_base/*
 __pycache__/
 .env
 !rfp_projects/.gitkeep
 !chroma_db/.gitkeep
+!knowledge_base/.gitkeep

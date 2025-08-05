@@ -1,3 +1,5 @@
+# rfp-rag-backend/main.py
+
 # --- Standard Library Imports ---
 import shutil, os, re, tempfile, traceback
 from typing import List
@@ -5,13 +7,15 @@ from datetime import timedelta
 
 # --- Third-Party Imports ---
 import chromadb
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, status
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, status, Form
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from sqlalchemy.exc import OperationalError
+from sentence_transformers import CrossEncoder
+import tiktoken
 
 # --- LangChain Imports ---
 from langchain_community.document_loaders import PyPDFLoader
@@ -20,6 +24,7 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage
 
 # --- Local Application Imports ---
 import crud, models, schemas, auth
@@ -34,18 +39,19 @@ load_dotenv()
 APP_ENV = os.getenv("APP_ENV", "development")
 
 # --- App Setup ---
-# **FIX**: Reverted to the original local directory paths for development fallback.
 PROJECTS_DIRECTORY = os.getenv("PROJECTS_DIRECTORY", "./rfp_projects")
 DB_DIRECTORY = os.getenv("DB_DIRECTORY", "./chroma_db")
+KNOWLEDGE_BASE_DIRECTORY = os.getenv("KNOWLEDGE_BASE_DIRECTORY", "./knowledge_base")
 
 print(f"--- [Startup] Running in {APP_ENV} mode.")
 print(f"--- [Startup] Using PROJECTS_DIRECTORY: {PROJECTS_DIRECTORY}")
 print(f"--- [Startup] Using DB_DIRECTORY: {DB_DIRECTORY}")
+print(f"--- [Startup] Using KNOWLEDGE_BASE_DIRECTORY: {KNOWLEDGE_BASE_DIRECTORY}")
 os.makedirs(PROJECTS_DIRECTORY, exist_ok=True)
 os.makedirs(DB_DIRECTORY, exist_ok=True)
+os.makedirs(KNOWLEDGE_BASE_DIRECTORY, exist_ok=True)
 
-# **FIX**: Conditionally set the root_path for the API.
-# This allows the same codebase to work locally (no prefix) and in production (with /api prefix).
+
 api_root_path = "/api" if APP_ENV == "production" else ""
 
 app = FastAPI(title="RFP RAG System Backend", root_path=api_root_path)
@@ -109,6 +115,12 @@ def process_document(file_path: str, collection_name: str):
     print(f"--- [10] Finished processing and storing vectors for collection '{collection_name}'")
     return True
 
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
 # ==============================================================================
 # API ENDPOINTS
 # ==============================================================================
@@ -125,15 +137,10 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     # --- Domain validation for user registration ---
-    # Simple check to ensure the username is an email from an allowed domain
-    # without adding external libraries.
-    try:
-        domain = user.username.split('@')[1]
-        allowed_domains = ["avatar-computing.com", "sossecinc.com"]
-        if domain.lower() not in allowed_domains:
-            raise HTTPException(status_code=400, detail="Registration is restricted. Please use an email from an allowed domain.")
-    except IndexError:
-        raise HTTPException(status_code=400, detail="A valid email address is required for registration.")
+    domain = user.username.split('@')[1]
+    allowed_domains = ["avatar-computing.com", "sossecinc.com"]
+    if domain.lower() not in allowed_domains:
+        raise HTTPException(status_code=400, detail="Registration is restricted. Please use an email from avatar-computing.com or sossecinc.com.")
 
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
@@ -261,7 +268,12 @@ def get_settings(project_id: str, db: Session = Depends(get_db), current_user: m
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Project not found")
-    return schemas.Settings(system_prompt=db_project.system_prompt)
+    return schemas.Settings(
+        system_prompt=db_project.system_prompt,
+        model_name=db_project.model_name,
+        temperature=db_project.temperature,
+        context_amount=db_project.context_amount,
+    )
 
 @app.post("/rfps/{project_id}/settings", response_model=schemas.RfpProject)
 def update_settings(project_id: str, settings: schemas.Settings, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
@@ -288,16 +300,17 @@ def update_prompt_function(function_id: int, function_update: schemas.PromptFunc
         raise HTTPException(status_code=404, detail="Prompt function not found")
     return db_function
 
+# --- Initialize the CrossEncoder model ---
+rerank_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
 @app.post("/rfps/{project_id}/query/")
 async def query_project(project_id: str, request: schemas.QueryRequest, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_project = crud.get_project_by_project_id(db, project_id)
     if not db_project or db_project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="RFP project not found.")
 
-    prompt_template = ""
     query_text = ""
     user_message_text = ""
-    retriever_k = 15
 
     if request.prompt_function_id:
         prompt_function = crud.get_prompt_function(db, function_id=request.prompt_function_id)
@@ -305,97 +318,185 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
             raise HTTPException(status_code=404, detail="Prompt function not found.")
         query_text = prompt_function.prompt_text
         user_message_text = f"Executing function: {prompt_function.button_label}"
-        retriever_k = 30
-        prompt_template = f"""{db_project.system_prompt}
-
-**ROLE:** You are an expert analyst with deep expertise in document analysis and comprehensive reporting.
-
-**CONTEXT FROM DOCUMENTS:**
-{{context}}
-
-**USER REQUEST:**
-{{question}}
-
-**INSTRUCTIONS FOR COMPREHENSIVE RESPONSE:**
-1. **Structure**: Use clear headings, subheadings, and logical organization
-2. **Detail Level**: Provide thorough, detailed analysis with specific examples and evidence
-3. **Formatting**: Use proper Markdown with:
-   - Headers (##, ###) for sections
-   - Bullet points and numbered lists
-   - **Bold** for emphasis and key points
-   - Tables when appropriate
-   - Code blocks for technical content
-4. **Length**: Aim for comprehensive coverage - be thorough rather than brief
-5. **Evidence**: Always cite specific information from the documents
-6. **Analysis**: Don't just summarize - provide insights, implications, and recommendations
-
-**COMPREHENSIVE RESPONSE:**"""
     elif request.query:
         query_text = request.query
         user_message_text = request.query
-        prompt_template = f"""{db_project.system_prompt}
-
-**ROLE:** You are a knowledgeable assistant providing detailed, well-structured responses.
-
-**PREVIOUS CONVERSATION CONTEXT:**
-{{chat_history}}
-
-**RELEVANT DOCUMENT CONTEXT:**
-{{context}}
-
-**CURRENT QUESTION:**
-{{question}}
-
-**RESPONSE GUIDELINES:**
-- Provide comprehensive, detailed answers
-- Use proper Markdown formatting with headers, lists, and emphasis
-- Reference previous conversation when relevant
-- Include specific details and examples from the documents
-- Structure your response with clear sections
-- Be thorough and informative rather than brief
-- Use tables, bullet points, and formatting to enhance readability
-
-**DETAILED RESPONSE:**"""
     else:
         raise HTTPException(status_code=400, detail="Request must include either a 'query' or a 'prompt_function_id'.")
-
+    
     try:
         crud.create_chat_message(db, message=schemas.ChatMessageCreate(message_type="query", text=user_message_text), project_id=db_project.id)
-        chat_history_for_model = crud.get_chat_history_for_model(db, project_id=db_project.id)
-        QA_CHAIN_PROMPT = PromptTemplate.from_template(prompt_template)
+        
         embeddings = OpenAIEmbeddings()
-        vectordb = Chroma(persist_directory=DB_DIRECTORY, embedding_function=embeddings, collection_name=project_id)
-        retriever = vectordb.as_retriever(search_kwargs={"k": retriever_k})
-        qa = ConversationalRetrievalChain.from_llm(
-            llm=ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.1),  # Changed to GPT-4 and lower temp
-            retriever=retriever, 
-            combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT}, 
-            return_source_documents=True
+        
+        # --- Retrieve a larger set of documents for re-ranking ---
+        project_vectordb = Chroma(persist_directory=DB_DIRECTORY, embedding_function=embeddings, collection_name=project_id)
+        project_retriever = project_vectordb.as_retriever(search_kwargs={"k": 20}) # Retrieve 20 docs
+        project_docs = project_retriever.get_relevant_documents(query_text)
+
+        all_docs = project_docs
+        kb_docs = []
+
+        if request.use_knowledge_base:
+            try:
+                kb_vectordb = Chroma(persist_directory=DB_DIRECTORY, embedding_function=embeddings, collection_name="knowledge_base")
+                kb_retriever = kb_vectordb.as_retriever(search_kwargs={"k": 20})
+                kb_docs = kb_retriever.get_relevant_documents(query_text)
+                all_docs.extend(kb_docs)
+            except Exception as e:
+                print(f"Could not retrieve from knowledge base: {e}")
+                pass
+
+        # --- Re-rank the retrieved documents ---
+        if all_docs:
+            rerank_pairs = [[query_text, doc.page_content] for doc in all_docs]
+            scores = rerank_model.predict(rerank_pairs)
+            reranked_docs = [doc for _, doc in sorted(zip(scores, all_docs), key=lambda x: x[0], reverse=True)]
+        else:
+            reranked_docs = []
+
+        # --- Dynamic Context Sizing ---
+        context_size_map = {'low': 5, 'medium': 10, 'high': 15}
+        top_k = context_size_map.get(db_project.context_size, 10)
+        final_docs = reranked_docs[:top_k]
+
+        # --- Intelligent, Token-Aware Prompt Construction ---
+        # Define the maximum tokens for the model, with a buffer
+        max_tokens = 16385
+        buffer = 1000  # Buffer for the answer and other overhead
+        token_budget = max_tokens - buffer
+        
+        # Calculate tokens for the fixed parts of the prompt
+        chat_history_tuples = crud.get_chat_history_for_model(db, project_id=db_project.id)
+        
+        prompt_template_text = f"""{db_project.system_prompt}
+You have been provided with context from two sources: project-specific documents and a general knowledge base.
+**CONTEXT FROM PROJECT DOCUMENTS:**
+{{project_context}}
+**CONTEXT FROM KNOWLEDGE BASE:**
+{{knowledge_base_context}}
+**PREVIOUS CONVERSATION:**
+{chat_history_tuples}
+**CURRENT QUESTION:**
+{query_text}
+**DETAILED RESPONSE:**
+"""
+        # Calculate tokens of the template without the document context
+        fixed_parts_tokens = num_tokens_from_string(prompt_template_text.format(project_context="", knowledge_base_context=""), "cl100k_base")
+        
+        context_token_budget = token_budget - fixed_parts_tokens
+        
+        # Build the context strings token by token
+        final_project_context = ""
+        final_kb_context = ""
+        final_docs_for_sources = []
+        
+        current_context_tokens = 0
+        
+        for doc in final_docs:
+            doc_tokens = num_tokens_from_string(doc.page_content, "cl100k_base")
+            if current_context_tokens + doc_tokens <= context_token_budget:
+                if doc in project_docs:
+                    final_project_context += doc.page_content + "\n"
+                elif doc in kb_docs:
+                    final_kb_context += doc.page_content + "\n"
+                
+                final_docs_for_sources.append(doc)
+                current_context_tokens += doc_tokens
+            else:
+                # Stop adding docs if we exceed the budget
+                break
+        
+        if not final_kb_context:
+            final_kb_context = "No knowledge base context was used for this query."
+        
+        # Construct the final prompt
+        final_prompt = prompt_template_text.format(
+            project_context=final_project_context,
+            knowledge_base_context=final_kb_context
         )
-        result = qa.invoke({"question": query_text, "chat_history": chat_history_for_model})
-        crud.create_chat_message(db, message=schemas.ChatMessageCreate(message_type="answer", text=result["answer"]), project_id=db_project.id)
-        source_docs = [{"source": os.path.basename(doc.metadata.get("source", "N/A")), "page": doc.metadata.get("page", "N/A")} for doc in result["source_documents"]]
-        return {"answer": result["answer"], "sources": list({f"Page {s['page']} of {s['source']}" for s in source_docs})}
+
+        if APP_ENV == "development":
+            print("===================== PROMPT TO LLM =====================")
+            print(f"--- Token Count: {num_tokens_from_string(final_prompt, 'cl100k_base')} ---")
+            print(final_prompt)
+            print("=========================================================")
+
+        llm = ChatOpenAI(model_name=db_project.model_name, temperature=db_project.temperature, max_tokens=buffer)
+        
+        messages = [HumanMessage(content=final_prompt)]
+        result = llm.invoke(messages)
+        
+        answer = result.content
+
+        crud.create_chat_message(db, message=schemas.ChatMessageCreate(message_type="answer", text=answer), project_id=db_project.id)
+        
+        source_docs = [{"source": os.path.basename(doc.metadata.get("source", "N/A")), "page": doc.metadata.get("page", "N/A")} for doc in final_docs_for_sources]
+        return {"answer": answer, "sources": list({f"Page {s['page']} of {s['source']}" for s in source_docs})}
+
     except Exception as e:
-        if "does not exist" in str(e):
+        if "does not exist" in str(e) and "knowledge_base" not in str(e):
              raise HTTPException(status_code=404, detail=f"No documents have been uploaded to '{project_id}' yet.")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An error occurred during query: {str(e)}")
 
-@app.get("/db-test")
-def test_db_connection(db: Session = Depends(get_db)):
-    print("--- [DB TEST] Received request for database connection test. ---")
+
+# ==============================================================================
+# KNOWLEDGE BASE ENDPOINTS
+# ==============================================================================
+
+@app.post("/knowledge-base/upload/")
+async def upload_to_knowledge_base(
+    file: UploadFile = File(...),
+    description: str = Form(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    file_location = os.path.join(KNOWLEDGE_BASE_DIRECTORY, file.filename)
+    
     try:
-        db.execute('SELECT 1')
-        print("--- [DB TEST] Successfully executed 'SELECT 1'. Connection is OK. ---")
-        return {"status": "success", "message": "Database connection successful!"}
-    except OperationalError as e:
-        print(f"!!! [FATAL DB ERROR] Could not connect to the database. !!!")
-        print(f"Error Details: {e}")
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
+        with open(file_location, "wb+") as file_object:
+            shutil.copyfileobj(file.file, file_object)
+        
+        process_document(file_location, collection_name="knowledge_base")
+
+        doc_create = schemas.KnowledgeBaseDocumentCreate(document_name=file.filename, description=description)
+        crud.create_knowledge_base_document(db, doc_create)
+
+        return {"info": f"File '{file.filename}' uploaded to the knowledge base."}
     except Exception as e:
-        print(f"!!! [FATAL UNKNOWN ERROR] An unexpected error occurred during DB test. !!!")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"An unknown error occurred: {e}")
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+@app.get("/knowledge-base/documents/", response_model=List[schemas.KnowledgeBaseDocument])
+def get_knowledge_base_documents(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
+    return crud.get_knowledge_base_documents(db)
+
+@app.get("/knowledge-base/documents/{document_name}")
+async def download_knowledge_base_document(document_name: str, current_user: models.User = Depends(auth.get_current_active_user)):
+    file_path = os.path.join(KNOWLEDGE_BASE_DIRECTORY, document_name)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return FileResponse(path=file_path, filename=document_name)
+
+@app.delete("/knowledge-base/documents/{document_name}", status_code=204)
+async def delete_knowledge_base_document(document_name: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
+    file_path_to_delete = os.path.join(KNOWLEDGE_BASE_DIRECTORY, document_name)
+
+    try:
+        client = chromadb.PersistentClient(path=DB_DIRECTORY)
+        collection = client.get_collection(name="knowledge_base")
+        collection.delete(where={"source": file_path_to_delete})
+        print(f"Deleted vectors for source: {file_path_to_delete}")
+    except Exception as e:
+        print(f"Could not delete vectors for {document_name}: {e}")
+
+    if os.path.isfile(file_path_to_delete):
+        os.remove(file_path_to_delete)
+        crud.delete_knowledge_base_document(db, document_name)
+    else:
+        raise HTTPException(status_code=404, detail="Document file not found")
+    return
 
 # ==============================================================================
 # APPLICATION STARTUP EVENT

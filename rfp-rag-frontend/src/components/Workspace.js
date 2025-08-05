@@ -1,9 +1,5 @@
-/*
--------------------------------------------------------------------
-File: src/components/Workspace.js (Corrected)
-Description: Correctly handles and dispatches function execution vs. text queries.
--------------------------------------------------------------------
-*/
+// rfp-rag-frontend/src/components/Workspace.js
+
 import React, { useState, useCallback, useEffect } from 'react';
 import FunctionSidebar from './FunctionSidebar';
 import ProjectView from './ProjectView';
@@ -14,6 +10,7 @@ import api from '../services/api';
 const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, functions, fetchFunctions }) => {
     const [chatHistory, setChatHistory] = useState([]);
     const [isQuerying, setIsQuerying] = useState(false);
+    const [useKnowledgeBase, setUseKnowledgeBase] = useState(false);
 
     const fetchProjectData = useCallback(async () => {
         if (!project) return;
@@ -36,8 +33,7 @@ const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, function
         setChatHistory(prev => [...prev, { type: 'query', text: userMessageText }]);
 
         try {
-            // **FIX**: Construct a clean payload with EITHER query OR prompt_function_id
-            const payload = prompt_function_id ? { prompt_function_id } : { query };
+            const payload = prompt_function_id ? { prompt_function_id, use_knowledge_base: useKnowledgeBase } : { query, use_knowledge_base: useKnowledgeBase };
             const response = await api.post(`/rfps/${project.project_id}/query/`, payload);
             const data = response.data;
             
@@ -69,6 +65,8 @@ const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, function
                     chatHistory={chatHistory}
                     isQuerying={isQuerying}
                     onQuerySubmit={(queryText) => handleQuerySubmit({ query: queryText })}
+                    useKnowledgeBase={useKnowledgeBase}
+                    setUseKnowledgeBase={setUseKnowledgeBase}
                 />
                 <InfoSidebar project={project} key={project.project_id} />
             </div>

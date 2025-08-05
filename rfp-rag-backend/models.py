@@ -1,8 +1,6 @@
-# -------------------------------------------------------------------
-# File: rfp-rag-backend/models.py (Complete & Corrected)
-# Description: Defines the database tables as Python classes.
-# -------------------------------------------------------------------
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean
+# rfp-rag-backend/models.py
+
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -21,6 +19,10 @@ class RfpProject(Base):
     project_id = Column(String, unique=True, index=True)
     system_prompt = Column(Text, default="You are a helpful assistant.")
     owner_id = Column(Integer, ForeignKey("users.id"))
+    model_name = Column(String, default="gpt-3.5-turbo")
+    temperature = Column(Float, default=0.7)
+    context_amount = Column(Integer, default=15)
+    context_size = Column(String, default='medium')
     owner = relationship("User", back_populates="projects")
     chat_messages = relationship("ChatMessage", back_populates="project", cascade="all, delete-orphan")
 
@@ -42,3 +44,9 @@ class PromptFunction(Base):
     prompt_text = Column(Text)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
+
+class KnowledgeBaseDocument(Base):
+    __tablename__ = "knowledge_base_documents"
+    id = Column(Integer, primary_key=True, index=True)
+    document_name = Column(String, unique=True, index=True)
+    description = Column(Text, nullable=True)

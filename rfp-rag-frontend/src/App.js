@@ -1,9 +1,5 @@
-/*
--------------------------------------------------------------------
-File: src/App.js (Corrected)
-Description: Manages modals and the new Header component.
--------------------------------------------------------------------
-*/
+// rfp-rag-frontend/src/App.js
+
 import React, { useState, useCallback, useEffect } from 'react';
 import './App.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -16,6 +12,7 @@ import SplashPage from './components/SplashPage';
 import Notification from './components/Notification';
 import Header from './components/Header';
 import PromptFunctionManager from './components/PromptFunctionManager';
+import KnowledgeBaseManager from './components/KnowledgeBaseManager';
 import api from './services/api';
 
 function App() {
@@ -32,6 +29,7 @@ function MainApp() {
   const { user, view, setView, selectedProject, setSelectedProject } = useAuth();
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState(null);
+  const [isKbModalOpen, setIsKbModalOpen] = useState(false);
   const [functions, setFunctions] = useState([]);
 
   const fetchFunctions = useCallback(async () => {
@@ -68,6 +66,9 @@ function MainApp() {
     setIsPromptModalOpen(false);
     setEditingPrompt(null);
   };
+
+  const openKbModal = () => setIsKbModalOpen(true);
+  const closeKbModal = () => setIsKbModalOpen(false);
 
   const renderContent = () => {
     if (!user) {
@@ -107,7 +108,8 @@ function MainApp() {
           onFunctionsUpdate={fetchFunctions}
         />
        )}
-      <Header />
+       {isKbModalOpen && <KnowledgeBaseManager onClose={closeKbModal} />}
+      <Header onKnowledgeBaseClick={openKbModal} />
       <main>
         {renderContent()}
       </main>
