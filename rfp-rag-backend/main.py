@@ -140,7 +140,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     domain = user.username.split('@')[1]
     allowed_domains = ["avatar-computing.com", "sossecinc.com"]
     if domain.lower() not in allowed_domains:
-        raise HTTPException(status_code=400, detail="Registration is restricted. Please use an email from avatar-computing.com or sossecinc.com.")
+        raise HTTPException(status_code=400, detail="Registration is restricted.")
 
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
@@ -272,7 +272,8 @@ def get_settings(project_id: str, db: Session = Depends(get_db), current_user: m
         system_prompt=db_project.system_prompt,
         model_name=db_project.model_name,
         temperature=db_project.temperature,
-        context_amount=db_project.context_amount,
+        # context_amount=db_project.context_amount, # <-- This line is removed
+        context_size=db_project.context_size,
     )
 
 @app.post("/rfps/{project_id}/settings", response_model=schemas.RfpProject)
@@ -299,6 +300,16 @@ def update_prompt_function(function_id: int, function_update: schemas.PromptFunc
     if not db_function:
         raise HTTPException(status_code=404, detail="Prompt function not found")
     return db_function
+
+@app.delete("/rfps/{project_id}/chat-history", status_code=204)
+def clear_project_chat_history(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
+    """Deletes all chat messages for a specific project."""
+    db_project = crud.get_project_by_project_id(db, project_id)
+    if not db_project or db_project.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="RFP project not found.")
+    
+    crud.delete_chat_history(db, project_id=db_project.id)
+    return
 
 # --- Initialize the CrossEncoder model ---
 rerank_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
@@ -329,12 +340,11 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
         
         embeddings = OpenAIEmbeddings()
         
-        # --- Retrieve a larger set of documents for re-ranking ---
         project_vectordb = Chroma(persist_directory=DB_DIRECTORY, embedding_function=embeddings, collection_name=project_id)
-        project_retriever = project_vectordb.as_retriever(search_kwargs={"k": 20}) # Retrieve 20 docs
+        project_retriever = project_vectordb.as_retriever(search_kwargs={"k": 20})
         project_docs = project_retriever.get_relevant_documents(query_text)
 
-        all_docs = project_docs
+        all_docs = list(project_docs) # Use a copy
         kb_docs = []
 
         if request.use_knowledge_base:
@@ -347,7 +357,6 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
                 print(f"Could not retrieve from knowledge base: {e}")
                 pass
 
-        # --- Re-rank the retrieved documents ---
         if all_docs:
             rerank_pairs = [[query_text, doc.page_content] for doc in all_docs]
             scores = rerank_model.predict(rerank_pairs)
@@ -355,66 +364,104 @@ async def query_project(project_id: str, request: schemas.QueryRequest, db: Sess
         else:
             reranked_docs = []
 
-        # --- Dynamic Context Sizing ---
         context_size_map = {'low': 5, 'medium': 10, 'high': 15}
         top_k = context_size_map.get(db_project.context_size, 10)
-        final_docs = reranked_docs[:top_k]
+        
+        # Build the context strings and final doc list together
+        final_docs_for_sources = []
+        project_context_list = []
+        kb_context_list = []
+
+        for doc in reranked_docs[:top_k]:
+            final_docs_for_sources.append(doc)
+            if doc in kb_docs:
+                kb_context_list.append(doc.page_content)
+            else: # Assumes if not in kb_docs, it must be in project_docs
+                project_context_list.append(doc.page_content)
+        
+        project_context = "\n".join(project_context_list)
+        knowledge_base_context = "\n".join(kb_context_list)
 
         # --- Intelligent, Token-Aware Prompt Construction ---
-        # Define the maximum tokens for the model, with a buffer
         max_tokens = 16385
-        buffer = 1000  # Buffer for the answer and other overhead
+        buffer = 1500  # Increased buffer for more complex answers
         token_budget = max_tokens - buffer
         
-        # Calculate tokens for the fixed parts of the prompt
         chat_history_tuples = crud.get_chat_history_for_model(db, project_id=db_project.id)
         
-        prompt_template_text = f"""{db_project.system_prompt}
+        # --- Conditionally build the prompt template ---
+        if request.use_knowledge_base:
+            prompt_template_text = f"""{db_project.system_prompt}
+
 You have been provided with context from two sources: project-specific documents and a general knowledge base.
 **CONTEXT FROM PROJECT DOCUMENTS:**
-{{project_context}}
+{{context}}
 **CONTEXT FROM KNOWLEDGE BASE:**
 {{knowledge_base_context}}
 **PREVIOUS CONVERSATION:**
 {chat_history_tuples}
 **CURRENT QUESTION:**
 {query_text}
+**INSTRUCTIONS:**
+- Provide a thorough, detailed analysis
+- Use proper Markdown formatting with headers, bullet points, and emphasis
+- Include specific details and examples from the documents
+- Structure your response with clear sections
+- Be comprehensive but well-organized
+- Use tables, lists, and formatting to enhance readability
 **DETAILED RESPONSE:**
 """
-        # Calculate tokens of the template without the document context
-        fixed_parts_tokens = num_tokens_from_string(prompt_template_text.format(project_context="", knowledge_base_context=""), "cl100k_base")
+        else:
+            prompt_template_text = f"""{db_project.system_prompt}
+
+**CONTEXT FROM DOCUMENTS:**
+{{context}}
+**PREVIOUS CONVERSATION:**
+{chat_history_tuples}
+**CURRENT QUESTION:**
+{query_text}
+**INSTRUCTIONS:**
+- Provide a thorough, detailed analysis
+- Use proper Markdown formatting with headers, bullet points, and emphasis
+- Include specific details and examples from the documents
+- Structure your response with clear sections
+- Be comprehensive but well-organized
+- Use tables, lists, and formatting to enhance readability
+**DETAILED RESPONSE:**
+"""
         
-        context_token_budget = token_budget - fixed_parts_tokens
-        
-        # Build the context strings token by token
-        final_project_context = ""
-        final_kb_context = ""
-        final_docs_for_sources = []
-        
+        # --- Build final context with token budget ---
+        final_context_parts = []
         current_context_tokens = 0
         
-        for doc in final_docs:
-            doc_tokens = num_tokens_from_string(doc.page_content, "cl100k_base")
+        # Calculate tokens for the template without the document context
+        if request.use_knowledge_base:
+            fixed_parts_tokens = num_tokens_from_string(prompt_template_text.format(context="", knowledge_base_context=""), "cl100k_base")
+        else:
+            fixed_parts_tokens = num_tokens_from_string(prompt_template_text.format(context=""), "cl100k_base")
+
+        context_token_budget = token_budget - fixed_parts_tokens
+
+        # Add context documents one by one until the budget is filled
+        for doc in final_docs_for_sources:
+            doc_content = doc.page_content + "\n---\n"
+            doc_tokens = num_tokens_from_string(doc_content, "cl100k_base")
             if current_context_tokens + doc_tokens <= context_token_budget:
-                if doc in project_docs:
-                    final_project_context += doc.page_content + "\n"
-                elif doc in kb_docs:
-                    final_kb_context += doc.page_content + "\n"
-                
-                final_docs_for_sources.append(doc)
+                final_context_parts.append(doc_content)
                 current_context_tokens += doc_tokens
             else:
-                # Stop adding docs if we exceed the budget
                 break
         
-        if not final_kb_context:
-            final_kb_context = "No knowledge base context was used for this query."
+        final_context = "".join(final_context_parts)
         
         # Construct the final prompt
-        final_prompt = prompt_template_text.format(
-            project_context=final_project_context,
-            knowledge_base_context=final_kb_context
-        )
+        if request.use_knowledge_base:
+            final_prompt = prompt_template_text.format(
+                context=project_context,
+                knowledge_base_context=knowledge_base_context
+            )
+        else:
+            final_prompt = prompt_template_text.format(context=final_context)
 
         if APP_ENV == "development":
             print("===================== PROMPT TO LLM =====================")
@@ -426,11 +473,8 @@ You have been provided with context from two sources: project-specific documents
         
         messages = [HumanMessage(content=final_prompt)]
         result = llm.invoke(messages)
-        
         answer = result.content
-
         crud.create_chat_message(db, message=schemas.ChatMessageCreate(message_type="answer", text=answer), project_id=db_project.id)
-        
         source_docs = [{"source": os.path.basename(doc.metadata.get("source", "N/A")), "page": doc.metadata.get("page", "N/A")} for doc in final_docs_for_sources]
         return {"answer": answer, "sources": list({f"Page {s['page']} of {s['source']}" for s in source_docs})}
 

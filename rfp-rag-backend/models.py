@@ -21,11 +21,15 @@ class RfpProject(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
     model_name = Column(String, default="gpt-3.5-turbo")
     temperature = Column(Float, default=0.7)
-    context_amount = Column(Integer, default=15)
+    # context_amount = Column(Integer, default=15) # <-- This line is removed
     context_size = Column(String, default='medium')
     owner = relationship("User", back_populates="projects")
-    chat_messages = relationship("ChatMessage", back_populates="project", cascade="all, delete-orphan")
-
+    chat_messages = relationship(
+        "ChatMessage", 
+        back_populates="project", 
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.created_at"
+    )
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
     id = Column(Integer, primary_key=True, index=True)

@@ -1,7 +1,8 @@
 /*
 -------------------------------------------------------------------
 File: src/components/RegisterPage.js (Complete)
-Description: Uses the notification system for success messages.
+Description: Uses the notification system for success messages and
+             properly handles and displays backend validation errors.
 -------------------------------------------------------------------
 */
 import React, { useState } from 'react';
@@ -24,7 +25,22 @@ const RegisterPage = () => {
       addNotification('Registration successful! Please log in.');
       setView('login');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed.');
+      // --- FIX: Intelligently parse FastAPI validation errors ---
+      if (err.response && err.response.data && err.response.data.detail) {
+        // Handle custom HTTPException details (like domain restriction)
+        if (typeof err.response.data.detail === 'string') {
+          setError(err.response.data.detail);
+        }
+        // Handle Pydantic validation errors (like invalid email format)
+        else if (Array.isArray(err.response.data.detail)) {
+          // Display the first validation error message
+          setError(err.response.data.detail[0].msg || 'Invalid input.');
+        } else {
+          setError('An unexpected error occurred during registration.');
+        }
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     }
   };
 
@@ -32,10 +48,11 @@ const RegisterPage = () => {
     <div className="auth-page">
       <div className="card auth-card">
         <h2>Register</h2>
+        <p>Registration is restricted.</p>
         <form onSubmit={handleSubmit}>
           <input
-            type="text"
-            placeholder="Username"
+            type="email"
+            placeholder="Company Email"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required

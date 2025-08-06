@@ -58,7 +58,7 @@ def update_settings(db: Session, project_id: str, settings: schemas.Settings, us
         db_project.system_prompt = settings.system_prompt
         db_project.model_name = settings.model_name
         db_project.temperature = settings.temperature
-        db_project.context_amount = settings.context_amount
+        # db_project.context_amount = settings.context_amount # <-- This line is removed
         db_project.context_size = settings.context_size
         db.commit()
         db.refresh(db_project)
@@ -70,6 +70,13 @@ def create_chat_message(db: Session, message: schemas.ChatMessageCreate, project
     db.commit()
     db.refresh(db_message)
     return db_message
+
+def delete_chat_history(db: Session, project_id: int):
+    """Deletes all chat messages for a given project."""
+    num_deleted = db.query(models.ChatMessage).filter(models.ChatMessage.project_id == project_id).delete(synchronize_session=False)
+    db.commit()
+    return num_deleted
+
 def get_chat_history_for_model(db: Session, project_id: int) -> List[Tuple[str, str]]:
     history = db.query(models.ChatMessage).filter(models.ChatMessage.project_id == project_id).order_by(models.ChatMessage.created_at).all()
     chat_history_tuples = []

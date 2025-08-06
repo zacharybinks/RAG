@@ -25,6 +25,10 @@ const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, function
         fetchProjectData();
     }, [fetchProjectData]);
 
+    const handleClearChat = () => {
+        setChatHistory([]);
+    };
+
     const handleQuerySubmit = async ({ query, prompt_function_id, label }) => {
         const userMessageText = query || `Executing: ${label}`;
         
@@ -68,7 +72,11 @@ const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, function
                     useKnowledgeBase={useKnowledgeBase}
                     setUseKnowledgeBase={setUseKnowledgeBase}
                 />
-                <InfoSidebar project={project} key={project.project_id} />
+                <InfoSidebar 
+                    project={project} 
+                    key={project.project_id} 
+                    onClearChat={handleClearChat} 
+                />
             </div>
         </>
     );

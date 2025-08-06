@@ -120,3 +120,68 @@ main { padding: 20px; }
 .edit-button { background: none; border: none; cursor: pointer; padding: 5px; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); color: #aaa; }
 .edit-button:hover { color: #333; }
 .edit-button svg { width: 16px; height: 16px; }
+
+/* ==========================================================================
+   Info Sidebar Styles
+   ========================================================================== */
+
+.info-sidebar .settings-area {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem; /* Increased gap for better spacing */
+}
+
+.info-sidebar .settings-area label {
+  display: block; 
+  font-weight: bold;
+  margin-bottom: -15px; /* Pull the control up closer to the label */
+  /* color property removed to inherit default text color */
+}
+
+.info-sidebar .settings-area select,
+.info-sidebar .settings-area input[type="range"] {
+  width: 100%; 
+  padding: 8px;
+  border-radius: 4px;
+           /* Standard white text */
+  box-sizing: border-box;
+}
+
+.info-sidebar .settings-area input[type="range"] {
+  padding: 0; 
+}
+
+.info-sidebar .settings-area button {
+  width: 100%;
+}
+
+.info-sidebar .settings-area hr {
+  border: none;
+  border-top: 1px solid #444;
+  margin: 1rem 0;
+}
+
+.info-sidebar .danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid #8b0000; /* Darker red border */
+  border-radius: 4px;
+}
+
+.info-sidebar .danger-zone label {
+  margin-bottom: 0; 
+  font-weight: bold;
+}
+
+.info-sidebar .danger-zone button.danger {
+  background-color: #dc3545;
+  color: white;
+  border: 1px solid #dc3545;
+}
+
+.info-sidebar .danger-zone button.danger:hover {
+  background-color: #c82333; 
+  border-color: #bd2130;
+}

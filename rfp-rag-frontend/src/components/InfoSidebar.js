@@ -13,7 +13,7 @@ const TrashIcon = () => (
     </svg>
 );
 
-const InfoSidebar = ({ project }) => {
+const InfoSidebar = ({ project, onClearChat }) => {
     const { addNotification } = useNotification();
     const [activeTab, setActiveTab] = useState('documents');
     const [selectedFile, setSelectedFile] = useState(null);
@@ -21,7 +21,6 @@ const InfoSidebar = ({ project }) => {
     const [systemPrompt, setSystemPrompt] = useState('');
     const [modelName, setModelName] = useState('gpt-3.5-turbo');
     const [temperature, setTemperature] = useState(0.7);
-    const [contextAmount, setContextAmount] = useState(15);
     const [contextSize, setContextSize] = useState('medium');
     const [isSavingSettings, setIsSavingSettings] = useState(false);
     const [documents, setDocuments] = useState([]);
@@ -34,7 +33,6 @@ const InfoSidebar = ({ project }) => {
             setSystemPrompt(settingsRes.data.system_prompt);
             setModelName(settingsRes.data.model_name);
             setTemperature(settingsRes.data.temperature);
-            setContextAmount(settingsRes.data.context_amount);
             setContextSize(settingsRes.data.context_size);
             const docsRes = await api.get(`/rfps/${project.project_id}/documents/`);
             setDocuments(docsRes.data);
@@ -47,6 +45,18 @@ const InfoSidebar = ({ project }) => {
         fetchSidebarData();
     }, [fetchSidebarData]);
 
+    const handleClearChatHistory = async () => {
+        if (window.confirm('Are you sure you want to delete the entire chat history for this project? This cannot be undone.')) {
+            try {
+                await api.delete(`/rfps/${project.project_id}/chat-history`);
+                addNotification('Chat history cleared successfully!');
+                onClearChat();
+            } catch (error) {
+                addNotification('Failed to clear chat history.', 'error');
+            }
+        }
+    };
+
     const handleSaveSettings = async () => {
         setIsSavingSettings(true);
         try {
@@ -54,7 +64,6 @@ const InfoSidebar = ({ project }) => {
                 system_prompt: systemPrompt,
                 model_name: modelName,
                 temperature: temperature,
-                context_amount: contextAmount,
                 context_size: contextSize
             });
             addNotification('Settings saved successfully!');
@@ -81,15 +90,27 @@ const InfoSidebar = ({ project }) => {
             setSelectedFile(null);
             await fetchSidebarData();
         } catch (e) {
-            console.error("--- [FAILURE] Error during upload:", e);
             addNotification(e.response?.data?.detail || 'File upload failed.', 'error');
         } finally {
             setIsUploading(false);
         }
     };
 
-    const handleDownload = (docName) => {
-        window.open(`${api.defaults.baseURL}/rfps/${project.project_id}/documents/${docName}`, '_blank');
+    const handleDownload = async (docName) => {
+        try {
+            const response = await api.get(`/rfps/${project.project_id}/documents/${docName}`, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', docName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+        } catch (error) {
+            addNotification('Failed to download document.', 'error');
+        }
     };
 
     const handleDelete = async (docName) => {
@@ -121,8 +142,8 @@ const InfoSidebar = ({ project }) => {
                             </div>
                             <ul className="document-list">
                                 {documents.map(doc => (
-                                    <li key={doc.name} onClick={() => handleDownload(doc.name)}>
-                                        <span className="doc-name">{doc.name}</span>
+                                    <li key={doc.name}>
+                                        <span className="doc-name" onClick={() => handleDownload(doc.name)} style={{cursor: 'pointer'}}>{doc.name}</span>
                                         <div className="doc-actions">
                                             <button onClick={(e) => { e.stopPropagation(); handleDelete(doc.name); }} title="Delete">
                                                 <TrashIcon />
@@ -135,23 +156,31 @@ const InfoSidebar = ({ project }) => {
                     )}
                     {activeTab === 'settings' && (
                         <div className="settings-area">
-                            <label>System Prompt</label>
-                            <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows="10"/>
+                            <label htmlFor="system-prompt">System Prompt</label>
+                            <textarea id="system-prompt" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows="10"/>
                             
-                            <label>Model Name</label>
-                            <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} />
+                            <label htmlFor="model-name">Open AI Model</label>
+                            <select id="model-name" disabled value={modelName} onChange={(e) => setModelName(e.target.value)}>
+                                <option value="gpt-4">GPT-4</option>
+                                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            </select>
 
-                            <label>Temperature: {temperature}</label>
-                            <input type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value))} />
+                            <label htmlFor="temperature">Creativity: {temperature}</label>
+                            <input id="temperature" type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value))} />
 
-                            <label>Context Size</label>
-                            <select value={contextSize} onChange={(e) => setContextSize(e.target.value)}>
+                            <label htmlFor="context-size">Context Size</label>
+                            <select id="context-size" value={contextSize} onChange={(e) => setContextSize(e.target.value)}>
                                 <option value="low">Low (5 docs)</option>
                                 <option value="medium">Medium (10 docs)</option>
                                 <option value="high">High (15 docs)</option>
                             </select>
 
                             <button onClick={handleSaveSettings} disabled={isSavingSettings}>{isSavingSettings ? 'Saving...' : 'Save Settings'}</button>
+
+                            <div className="danger-zone">
+                                <button className="danger" onClick={handleClearChatHistory}>Clear Chat History</button>
+                            </div>
                         </div>
                     )}
                 </div>

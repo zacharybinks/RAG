@@ -43,7 +43,8 @@ class RfpProject(RfpProjectBase):
     owner_id: int
     model_name: str
     temperature: float
-    context_amount: int
+    # context_amount: int # <-- This line is removed
+    context_size: str
     chat_messages: List[ChatMessage] = []
     class Config:
         from_attributes = True
@@ -73,7 +74,7 @@ class Settings(BaseModel):
     system_prompt: str
     model_name: str
     temperature: float
-    context_amount: int
+    # context_amount: int
     context_size: Literal['low', 'medium', 'high'] = 'medium'
 
 class KnowledgeBaseDocumentBase(BaseModel):
