@@ -52,7 +52,9 @@ const KnowledgeBaseManager = ({ onClose }) => {
     const handleDelete = async (docName) => {
         if (window.confirm(`Are you sure you want to delete ${docName} from the knowledge base?`)) {
             try {
-                await api.delete(`/knowledge-base/documents/${docName}`);
+                // FIX: Encode the document name to handle special characters like '#'
+                const encodedDocName = encodeURIComponent(docName);
+                await api.delete(`/knowledge-base/${encodedDocName}`);
                 addNotification('Document deleted successfully.');
                 fetchDocuments();
             } catch (error) {
@@ -61,8 +63,23 @@ const KnowledgeBaseManager = ({ onClose }) => {
         }
     };
     
-    const handleDownload = (docName) => {
-        window.open(`${api.defaults.baseURL}/knowledge-base/documents/${docName}`, '_blank');
+    const handleDownload = async (docName) => {
+        try {
+            // FIX: Encode the document name to handle special characters like '#'
+            const encodedDocName = encodeURIComponent(docName);
+            const response = await api.get(`/knowledge-base/${encodedDocName}`, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', docName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+        } catch (error) {
+            addNotification('Failed to download document.', 'error');
+        }
     };
 
     return (
@@ -83,8 +100,10 @@ const KnowledgeBaseManager = ({ onClose }) => {
                 <h4>Existing Documents</h4>
                 <ul className="document-list">
                     {documents.map(doc => (
-                        <li key={doc.document_name} onClick={() => handleDownload(doc.document_name)}>
-                            <span className="doc-name">{doc.document_name}</span>
+                        <li key={doc.document_name}>
+                            <span className="doc-name" onClick={() => handleDownload(doc.document_name)} style={{cursor: 'pointer'}}>
+                                {doc.document_name}
+                            </span>
                             <div className="doc-actions">
                                 <button onClick={(e) => { e.stopPropagation(); handleDelete(doc.document_name); }} title="Delete">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>

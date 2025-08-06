@@ -29,7 +29,7 @@ def create_rfp_project(db: Session, project: schemas.RfpProjectCreate, user_id: 
         system_prompt=f"You are a proposal writer... The current project is '{project.name}'.",
         model_name="gpt-3.5-turbo",
         temperature=0.2,
-        context_amount=15,  # We'll retrieve more documents to re-rank
+        #context_amount=15,  # We'll retrieve more documents to re-rank
         context_size='medium'
     )
     db.add(db_project)

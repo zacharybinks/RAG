@@ -403,13 +403,14 @@ You have been provided with context from two sources: project-specific documents
 **CURRENT QUESTION:**
 {query_text}
 **INSTRUCTIONS:**
-- Provide a thorough, detailed analysis
+- Your response must be exceptionally thorough, detailed, and comprehensive. Aim for a multi-paragraph, in-depth analysis.
+- Do not just summarize; provide deep insights, explore implications, and justify your reasoning with specific examples from the provided context.
+- Use advanced Markdown formatting, including headers, nested bullet points, and tables to structure your complex response.
+- Ensure the answer is well-organized, articulate, and demonstrates a sophisticated understanding of the material.
 - Use proper Markdown formatting with headers, bullet points, and emphasis
 - Include specific details and examples from the documents
-- Structure your response with clear sections
-- Be comprehensive but well-organized
 - Use tables, lists, and formatting to enhance readability
-**DETAILED RESPONSE:**
+**DETAILED, VERBOSE, AND COMPREHENSIVE RESPONSE:**
 """
         else:
             prompt_template_text = f"""{db_project.system_prompt}
@@ -421,13 +422,14 @@ You have been provided with context from two sources: project-specific documents
 **CURRENT QUESTION:**
 {query_text}
 **INSTRUCTIONS:**
-- Provide a thorough, detailed analysis
+- Your response must be exceptionally thorough, detailed, and comprehensive. Aim for a multi-paragraph, in-depth analysis.
+- Do not just summarize; provide deep insights, explore implications, and justify your reasoning with specific examples from the provided context.
+- Use advanced Markdown formatting, including headers, nested bullet points, and tables to structure your complex response.
+- Ensure the answer is well-organized, articulate, and demonstrates a sophisticated understanding of the material.
 - Use proper Markdown formatting with headers, bullet points, and emphasis
 - Include specific details and examples from the documents
-- Structure your response with clear sections
-- Be comprehensive but well-organized
 - Use tables, lists, and formatting to enhance readability
-**DETAILED RESPONSE:**
+**DETAILED, VERBOSE, AND COMPREHENSIVE RESPONSE:**
 """
         
         # --- Build final context with token budget ---
@@ -466,7 +468,7 @@ You have been provided with context from two sources: project-specific documents
         if APP_ENV == "development":
             print("===================== PROMPT TO LLM =====================")
             print(f"--- Token Count: {num_tokens_from_string(final_prompt, 'cl100k_base')} ---")
-            print(final_prompt)
+            # print(final_prompt)
             print("=========================================================")
 
         llm = ChatOpenAI(model_name=db_project.model_name, temperature=db_project.temperature, max_tokens=buffer)
@@ -516,28 +518,32 @@ async def upload_to_knowledge_base(
 def get_knowledge_base_documents(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return crud.get_knowledge_base_documents(db)
 
-@app.get("/knowledge-base/documents/{document_name}")
+# FIX: Corrected the download endpoint path
+@app.get("/knowledge-base/{document_name}")
 async def download_knowledge_base_document(document_name: str, current_user: models.User = Depends(auth.get_current_active_user)):
     file_path = os.path.join(KNOWLEDGE_BASE_DIRECTORY, document_name)
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="Document not found")
     return FileResponse(path=file_path, filename=document_name)
 
-@app.delete("/knowledge-base/documents/{document_name}", status_code=204)
+# FIX: Corrected the delete endpoint path
+@app.delete("/knowledge-base/{document_name}", status_code=204)
 async def delete_knowledge_base_document(document_name: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
-    file_path_to_delete = os.path.join(KNOWLEDGE_BASE_DIRECTORY, document_name)
+    clean_document_name = document_name.strip()
+    
+    file_path_to_delete = os.path.join(KNOWLEDGE_BASE_DIRECTORY, clean_document_name)
 
     try:
         client = chromadb.PersistentClient(path=DB_DIRECTORY)
         collection = client.get_collection(name="knowledge_base")
-        collection.delete(where={"source": file_path_to_delete})
-        print(f"Deleted vectors for source: {file_path_to_delete}")
+        collection.delete(where={"source": os.path.join(KNOWLEDGE_BASE_DIRECTORY, document_name)})
+        print(f"Deleted vectors for source: {document_name}")
     except Exception as e:
         print(f"Could not delete vectors for {document_name}: {e}")
 
     if os.path.isfile(file_path_to_delete):
         os.remove(file_path_to_delete)
-        crud.delete_knowledge_base_document(db, document_name)
+        crud.delete_knowledge_base_document(db, clean_document_name)
     else:
         raise HTTPException(status_code=404, detail="Document file not found")
     return

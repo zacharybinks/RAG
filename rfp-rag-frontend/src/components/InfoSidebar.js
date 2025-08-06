@@ -160,7 +160,7 @@ const InfoSidebar = ({ project, onClearChat }) => {
                             <textarea id="system-prompt" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows="10"/>
                             
                             <label htmlFor="model-name">Open AI Model</label>
-                            <select id="model-name" disabled value={modelName} onChange={(e) => setModelName(e.target.value)}>
+                            <select id="model-name" value={modelName} onChange={(e) => setModelName(e.target.value)}>
                                 <option value="gpt-4">GPT-4</option>
                                 <option value="gpt-4-turbo">GPT-4 Turbo</option>
                                 <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
