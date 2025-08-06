@@ -68,7 +68,7 @@ const Dashboard = ({ onNavigateToProject }) => {
         <span>Welcome, <strong>{user.username}</strong>!</span>
       </div>
       <div className="card">
-        <h2>Create New RFP Project</h2>
+        <h2>Create New Project</h2>
         <form onSubmit={handleCreateProject} className="create-project-form">
           <input type="text" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Enter new project name" />
           <button type="submit">Create</button>
