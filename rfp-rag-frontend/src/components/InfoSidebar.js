@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useNotification } from '../context/NotificationContext';
+// src/components/InfoSidebar.js
+import ModelSelector from './ModelSelector';
 
 const TrashIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -159,11 +161,11 @@ const InfoSidebar = ({ project, onClearChat }) => {
                             <label htmlFor="system-prompt">System Prompt</label>
                             <textarea id="system-prompt" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows="10"/>
                             
-                            <label htmlFor="model-name">Open AI Model</label>
-                            <select id="model-name" value={modelName} onChange={(e) => setModelName(e.target.value)}>
-                                <option value="gpt-4">GPT-4</option>
-                                <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <label htmlFor="model-name">OpenAI Model</label>
+                            <select id="model-name"value={modelName}onChange={(e) => setModelName(e.target.value)}>
+                                <option value="gpt-4o-mini">Fast (cheap) — gpt-4o-mini</option>
+                                <option value="gpt-4o">Balanced — gpt-4o</option>
+                                <option value="gpt-4.1">Verbose — gpt-4.1</option>
                             </select>
 
                             <label htmlFor="temperature">Creativity: {temperature}</label>
@@ -171,9 +173,9 @@ const InfoSidebar = ({ project, onClearChat }) => {
 
                             <label htmlFor="context-size">Context Size</label>
                             <select id="context-size" value={contextSize} onChange={(e) => setContextSize(e.target.value)}>
-                                <option value="low">Low (5 docs)</option>
-                                <option value="medium">Medium (10 docs)</option>
-                                <option value="high">High (15 docs)</option>
+                                <option value="low">Low (10 docs)</option>
+                                <option value="medium">Medium (15 docs)</option>
+                                <option value="high">High (20 docs)</option>
                             </select>
 
                             <button onClick={handleSaveSettings} disabled={isSavingSettings}>{isSavingSettings ? 'Saving...' : 'Save Settings'}</button>

@@ -88,3 +88,15 @@ class KnowledgeBaseDocument(KnowledgeBaseDocumentBase):
     id: int
     class Config:
         from_attributes = True
+
+# ---- Project Document schema (added) ----
+from typing import Optional
+
+class ProjectDocument(BaseModel):
+    id: Optional[int] = None
+    project_id: Optional[int] = None
+    document_name: str
+    file_path: Optional[str] = None
+
+    class Config:
+        from_attributes = True 

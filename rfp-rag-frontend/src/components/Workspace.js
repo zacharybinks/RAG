@@ -6,19 +6,27 @@ import ProjectView from './ProjectView';
 import InfoSidebar from './InfoSidebar';
 import Breadcrumbs from './Breadcrumbs';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, functions, fetchFunctions }) => {
+    const { setView } = useAuth();
     const [chatHistory, setChatHistory] = useState([]);
     const [isQuerying, setIsQuerying] = useState(false);
     const [useKnowledgeBase, setUseKnowledgeBase] = useState(false);
 
     const fetchProjectData = useCallback(async () => {
         if (!project) return;
-        setChatHistory(project.chat_messages.map(msg => ({
-            type: msg.message_type,
-            text: msg.text,
-            sources: msg.sources || []
-        })));
+        try {
+            const response = await api.get(`/rfps/${project.project_id}/chat-history`);
+            const data = response.data || [];
+            setChatHistory(data.map((msg) => ({
+                type: msg.message_type,
+                text: msg.text,
+                sources: msg.sources || []
+            })));
+        } catch (e) {
+            // ignore; chat history is optional
+        }
     }, [project]);
 
     useEffect(() => {
@@ -58,6 +66,9 @@ const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, function
     return (
         <>
             <Breadcrumbs project={project} onNavigateToDashboard={onNavigateToDashboard} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '8px 0' }}>
+                <button onClick={() => setView('proposal')}>Open Proposal Builder</button>
+            </div>
             <div className="workspace-layout">
                 <FunctionSidebar 
                     onExecuteFunction={handleQuerySubmit} 

@@ -1,0 +1,36 @@
+/* src/components/SectionsSidebar.css */
+.ss-wrap { padding: 12px; }
+.ss-title { margin-top: 0; }
+
+.ss-add {
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ss-list { display: grid; gap: 6px; }
+
+.ss-item {
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 8px;
+  background: white;
+}
+
+.ss-item.active { background: #f6faff; }
+.ss-input { width: 100%; padding: 6px; }
+.ss-name { font-weight: 600; cursor: pointer; margin-bottom: 6px; }
+.ss-row { display: flex; gap: 6px; }
+
+.ss-btn {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ss-btn.danger { color: #b00; }

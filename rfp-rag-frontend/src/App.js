@@ -14,6 +14,7 @@ import Header from './components/Header';
 import PromptFunctionManager from './components/PromptFunctionManager';
 import KnowledgeBaseManager from './components/KnowledgeBaseManager';
 import api from './services/api';
+import ProposalBuilder from './components/ProposalBuilder';
 
 function App() {
   return (
@@ -92,6 +93,11 @@ function MainApp() {
         ) : (
           <Dashboard onNavigateToProject={navigateToProject} />
         );
+      case 'proposal':
+        return selectedProject
+          ? <ProposalBuilder project={selectedProject} />
+          : <Dashboard onNavigateToProject={navigateToProject} />;
+
       case 'dashboard':
       default:
         return <Dashboard onNavigateToProject={navigateToProject} />;

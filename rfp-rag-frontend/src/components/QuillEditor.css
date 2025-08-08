@@ -1,0 +1,5 @@
+/* src/components/QuillEditor.css */
+.qe-wrap { min-height: 520px; background: white; }
+.qe-wrap .ql-container { min-height: 520px; border: none; }
+.qe-wrap .ql-toolbar { border-top-left-radius: 8px; border-top-right-radius: 8px; }
+.qe-wrap .ql-container.ql-snow { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
