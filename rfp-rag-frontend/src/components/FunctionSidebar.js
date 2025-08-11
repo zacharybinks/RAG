@@ -1,12 +1,13 @@
 /*
 -------------------------------------------------------------------
-File: src/components/FunctionSidebar.js (Corrected)
-Description: Passes the correct parameters for function execution.
+File: src/components/FunctionSidebar.js (Corrected and Updated)
+Description: Adds the Proposal Builder button while keeping existing functionality.
 -------------------------------------------------------------------
 */
 import React, { useState, useMemo, useEffect } from 'react';
 
-const FunctionSidebar = ({ onExecuteFunction, onOpenPromptModal, functions, fetchFunctions }) => {
+// The component now accepts `project` and `onSetView` for the new button
+const FunctionSidebar = ({ onExecuteFunction, onOpenPromptModal, functions, fetchFunctions, project, onSetView }) => {
     const [expandedModules, setExpandedModules] = useState({});
 
     useEffect(() => {
@@ -29,6 +30,19 @@ const FunctionSidebar = ({ onExecuteFunction, onOpenPromptModal, functions, fetc
     return (
         <aside className="function-sidebar">
             <h3>Modules</h3>
+
+            {/* --- ADDED BUTTON HERE --- */}
+            <div className="proposal-builder-action">
+                <button
+                    onClick={() => onSetView('proposal')}
+                    className="pb-btn-module"
+                    disabled={!project}
+                    title={!project ? 'Please select a project first' : 'Open Proposal Builder'}
+                >
+                    Open Proposal Builder
+                </button>
+            </div>
+
             {Object.entries(modules).map(([moduleName, funcs]) => (
                 <div key={moduleName} className="module-accordion">
                     <button className="module-header" onClick={() => toggleModule(moduleName)}>
@@ -39,7 +53,6 @@ const FunctionSidebar = ({ onExecuteFunction, onOpenPromptModal, functions, fetc
                         <div className="module-content">
                             {funcs.map(func => (
                                 <div key={func.id} className="function-button-container">
-                                    {/* **FIX**: Pass an object with prompt_function_id and label */}
                                     <button className="function-button" onClick={() => onExecuteFunction({ prompt_function_id: func.id, label: func.button_label })} title={func.description}>
                                         {func.button_label}
                                     </button>

@@ -66,15 +66,14 @@ const Workspace = ({ project, onNavigateToDashboard, onOpenPromptModal, function
     return (
         <>
             <Breadcrumbs project={project} onNavigateToDashboard={onNavigateToDashboard} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '8px 0' }}>
-                <button onClick={() => setView('proposal')}>Open Proposal Builder</button>
-            </div>
             <div className="workspace-layout">
                 <FunctionSidebar 
                     onExecuteFunction={handleQuerySubmit} 
                     onOpenPromptModal={onOpenPromptModal}
                     functions={functions}
                     fetchFunctions={fetchFunctions}
+                    project={project}
+                    onSetView={setView} // Pass onSetView down
                 />
                 <ProjectView 
                     chatHistory={chatHistory}

@@ -1,5 +1,4 @@
-// src/components/ProposalBuilder.js
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import InfoSidebar from './InfoSidebar';
 import SectionsSidebar from './SectionsSidebar';
@@ -20,15 +19,13 @@ const DOC_INLINE_STYLES = `
 const ProposalBuilder = ({ project }) => {
   const { setView } = useAuth();
 
-  const API_BASE = useMemo(() => api.defaults.baseURL, []);
-
   const [query, setQuery] = useState('');
   const [useKB, setUseKB] = useState(true);
   const [wordsPerSection, setWordsPerSection] = useState(1500);
 
   const [sections, setSections] = useState([]); // [{id,title, html}]
   const [activeId, setActiveId] = useState(null);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('Initializing...');
 
   const activeSection = sections.find((s) => s.id === activeId) || null;
 
@@ -71,6 +68,38 @@ const ProposalBuilder = ({ project }) => {
     },
     [activeId]
   );
+
+  const loadLatest = useCallback(async () => {
+    if (!project) return;
+    try {
+      setStatus('Loading latest draft...');
+      const resp = await api.get(`/rfps/${project.project_id}/proposal-load`);
+      const data = resp.data;
+      const items = (data.sections || []).map((s, idx) => ({
+        id: s.id || `${Date.now()}_${idx}`,
+        title: s.title || 'Section',
+        html: s.html || '',
+      }));
+      setSections(items);
+      setActiveId(items[0]?.id || null);
+      setStatus(items.length > 0 ? 'Loaded latest draft.' : 'No draft found. Ready to generate outline.');
+    } catch (e) {
+      // It's common for a 404 to occur if no draft exists, so we handle it gracefully.
+      if (e.response && e.response.status === 404) {
+        setStatus('No draft found. Ready to generate outline.');
+      } else {
+        console.error(e);
+        setStatus(e.response?.data?.detail || e.message || String(e));
+      }
+    }
+  }, [project]);
+
+  // --- ADDED THIS HOOK ---
+  // This automatically runs `loadLatest` when the component mounts
+  // or when the project ID changes.
+  useEffect(() => {
+    loadLatest();
+  }, [loadLatest]);
 
   async function askOutline() {
     if (!project) return;
@@ -131,27 +160,6 @@ const ProposalBuilder = ({ project }) => {
     }
   }
 
-  async function loadLatest() {
-    if (!project) return;
-    try {
-      setStatus('Loading latest draft...');
-      const resp = await api.get(`/rfps/${project.project_id}/proposal-load`);
-      const data = resp.data;
-      const items = (data.sections || []).map((s, idx) => ({
-        id: s.id || `${Date.now()}_${idx}`,
-        title: s.title || 'Section',
-        html: s.html || '',
-      }));
-      setSections(items);
-      setActiveId(items[0]?.id || null);
-      setStatus('Loaded latest draft.');
-    } catch (e) {
-      console.error(e);
-      setStatus(e.response?.data?.detail || e.message || String(e));
-    }
-  }
-
-  // Build full HTML with inline styles (better for .doc)
   const fullHtml = React.useMemo(() => {
     const toc = sections.map((s) => `<li>${s.title}</li>`).join('');
     const body = sections.map((s) => `<h2>${s.title}</h2>\n${s.html || ''}`).join('\n');
@@ -163,14 +171,7 @@ const ProposalBuilder = ({ project }) => {
           <meta charset="utf-8" />
           <title>Proposal Draft</title>
           <style>${DOC_INLINE_STYLES}</style>
-          <!--[if gte mso 9]><xml>
-          <w:WordDocument>
-            <w:View>Print</w:View>
-            <w:Zoom>100</w:Zoom>
-            <w:DoNotOptimizeForBrowser/>
-          </w:WordDocument>
-          </xml><![endif]-->
-        </head>
+          </head>
         <body>
           <h1>Proposal Draft</h1>
           <div class="toc">
@@ -234,7 +235,9 @@ const ProposalBuilder = ({ project }) => {
           {activeSection ? (
             <QuillEditor value={activeSection.html} onChange={setActiveHtml} />
           ) : (
-            <div className="pb-placeholder">Select a section to start editing.</div>
+            <div className="pb-placeholder">
+              {status.startsWith('Loading') ? 'Loading...' : 'Select a section or generate an outline to start.'}
+            </div>
           )}
         </div>
       </div>

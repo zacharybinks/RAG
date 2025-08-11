@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useNotification } from '../context/NotificationContext';
-// src/components/InfoSidebar.js
-import ModelSelector from './ModelSelector';
+
 
 const TrashIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -143,16 +142,30 @@ const InfoSidebar = ({ project, onClearChat }) => {
                                 <button onClick={handleFileUpload} disabled={!selectedFile || isUploading}>{isUploading ? 'Uploading...' : 'Upload File'}</button>
                             </div>
                             <ul className="document-list">
-                                {documents.map(doc => (
-                                    <li key={doc.name}>
-                                        <span className="doc-name" onClick={() => handleDownload(doc.name)} style={{cursor: 'pointer'}}>{doc.name}</span>
+                                {documents
+                                    .filter(doc => !doc.name.endsWith('.md'))
+                                    .map(doc => (
+                                        <li key={doc.name}>
+                                        <span
+                                            className="doc-name"
+                                            onClick={() => handleDownload(doc.name)}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            {doc.name}
+                                        </span>
                                         <div className="doc-actions">
-                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(doc.name); }} title="Delete">
-                                                <TrashIcon />
+                                            <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDelete(doc.name);
+                                            }}
+                                            title="Delete"
+                                            >
+                                            <TrashIcon />
                                             </button>
                                         </div>
-                                    </li>
-                                ))}
+                                        </li>
+                                    ))}
                             </ul>
                         </div>
                     )}
