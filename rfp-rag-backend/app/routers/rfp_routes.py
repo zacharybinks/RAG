@@ -677,6 +677,9 @@ async def proposal_section(
     proj_ctx = "\n".join(d.page_content for d in proj_final)
     kb_ctx = "\n".join(d.page_content for d in kb_final)
 
+    # Build KB block separately to avoid backslashes in f-string expressions
+    kb_block = f"**CONTEXT FROM KNOWLEDGE BASE:**\n{kb_ctx}\n" if use_knowledge_base else ""
+
     section_prompt = f"""{db_project.system_prompt}
 
 ## {section_title}
@@ -684,9 +687,7 @@ async def proposal_section(
 **CONTEXT FROM RFP DOCUMENTS:**
 {proj_ctx}
 
-{"**CONTEXT FROM KNOWLEDGE BASE:**\n" + kb_ctx if use_knowledge_base else ""}
-
-**INSTRUCTIONS:**
+{kb_block}**INSTRUCTIONS:**
 - Write a substantial, high-quality draft for this section (target {words_per_section}–{words_per_section+700} words).
 - Cite specific details from the provided context (filename/page if available).
 - Use clear headings, bullet points, and tables where helpful.
@@ -707,13 +708,16 @@ Use <h3>, <h4>, <p>, <ul>, <ol>, <table>, <thead>, <tbody>, <tr>, <th>, <td> tag
 # ------------------------
 # Save / Load proposal drafts (JSON + compiled HTML/MD)
 # ------------------------
+
 def _project_dir(project_id: str) -> str:
     return os.path.join(PROJECTS_DIRECTORY, project_id)
+
 
 def _draft_dir(project_id: str) -> str:
     d = os.path.join(_project_dir(project_id), "proposal_drafts")
     os.makedirs(d, exist_ok=True)
     return d
+
 
 def _compile_html(sections: List[Dict[str, Any]]) -> str:
     toc = "\n".join([f"<li>{s.get('title','Section')}</li>" for s in sections])
@@ -740,6 +744,7 @@ ul, ol {{ padding-left: 1.2em; }}
 </body>
 </html>"""
 
+
 def _compile_md(sections: List[Dict[str, Any]]) -> str:
     # naive HTML → MD: keep headings and strip the rest, since FE keeps HTML for editing
     lines = ["# Proposal Draft", "", "## Table of Contents"]
@@ -756,6 +761,7 @@ def _compile_md(sections: List[Dict[str, Any]]) -> str:
         lines.append(text.strip())
         lines.append("")
     return "\n".join(lines)
+
 
 @router.post("/rfps/{project_id}/proposal-save")
 async def proposal_save(
@@ -795,6 +801,7 @@ async def proposal_save(
 
     return {"status": "ok", "json": json_path, "html": html_path, "md": md_path, "timestamp": ts}
 
+
 @router.get("/rfps/{project_id}/proposal-load")
 async def proposal_load(
     project_id: str,
@@ -822,6 +829,7 @@ async def proposal_load(
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data
+
 
 @router.get("/rfps/{project_id}/proposal-versions")
 async def proposal_versions(
