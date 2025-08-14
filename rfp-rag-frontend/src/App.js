@@ -16,6 +16,9 @@ import KnowledgeBaseManager from './components/KnowledgeBaseManager';
 import api from './services/api';
 import ProposalBuilder from './components/ProposalBuilder';
 
+// ✅ NEW: import the V2 builder (adjust path if you put it under pages/)
+import ProposalBuilderV2 from './components/ProposalBuilderV2';
+
 function App() {
   return (
     <AuthProvider>
@@ -93,9 +96,16 @@ function MainApp() {
         ) : (
           <Dashboard onNavigateToProject={navigateToProject} />
         );
+
       case 'proposal':
         return selectedProject
           ? <ProposalBuilder project={selectedProject} />
+          : <Dashboard onNavigateToProject={navigateToProject} />;
+
+      // ✅ NEW: render V2 when view === 'proposalV2'
+      case 'proposalV2':
+        return selectedProject
+          ? <ProposalBuilderV2 project={selectedProject} />
           : <Dashboard onNavigateToProject={navigateToProject} />;
 
       case 'dashboard':

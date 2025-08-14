@@ -31,7 +31,6 @@ const FunctionSidebar = ({ onExecuteFunction, onOpenPromptModal, functions, fetc
         <aside className="function-sidebar">
             <h3>Modules</h3>
 
-            {/* --- ADDED BUTTON HERE --- */}
             <div className="proposal-builder-action">
                 <button
                     onClick={() => onSetView('proposal')}
@@ -41,7 +40,18 @@ const FunctionSidebar = ({ onExecuteFunction, onOpenPromptModal, functions, fetc
                 >
                     Open Proposal Builder
                 </button>
+
+                <button
+                    onClick={() => onSetView('proposalV2')}
+                    className="pb-btn-module pb-btn-alt"
+                    disabled={!project}
+                    title={!project ? 'Please select a project first' : 'Open Proposal Builder V2 (Instructions + Examples)'}
+                    style={{ marginLeft: 8 }}
+                >
+                    Open Proposal Builder V2
+                </button>
             </div>
+
 
             {Object.entries(modules).map(([moduleName, funcs]) => (
                 <div key={moduleName} className="module-accordion">

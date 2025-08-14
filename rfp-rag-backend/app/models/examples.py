@@ -1,15 +1,14 @@
 """SQLAlchemy models for example proposals and section instructions.
 
 These tables back the examples upload/index flow and the instruction
-sheets generated per section. We use string UUIDs for portability across
-SQLite/Postgres; if you're on Postgres only, you can switch to the
-`UUID` type from `sqlalchemy.dialects.postgresql`.
+sheets generated per section. Using UUID type for PostgreSQL compatibility.
 """
 from __future__ import annotations
 
 from uuid import uuid4
 
 from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -20,7 +19,7 @@ from database import Base
 class ProposalExample(Base):
     __tablename__ = "proposal_examples"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     title = Column(String, nullable=False)
 
     # Optional metadata used for filtering/search
@@ -45,8 +44,8 @@ class ProposalExample(Base):
 class ExampleSection(Base):
     __tablename__ = "example_sections"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
-    example_id = Column(String, ForeignKey("proposal_examples.id", ondelete="CASCADE"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    example_id = Column(UUID(as_uuid=True), ForeignKey("proposal_examples.id", ondelete="CASCADE"), nullable=False)
 
     section_key = Column(String, index=True, nullable=False)
     text = Column(Text, nullable=False)
@@ -62,7 +61,7 @@ class ExampleSection(Base):
 class SectionInstructionRow(Base):
     __tablename__ = "section_instructions"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = Column(String, nullable=False)
     section_key = Column(String, nullable=False)
     json = Column(JSON, nullable=False)

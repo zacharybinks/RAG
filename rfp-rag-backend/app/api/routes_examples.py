@@ -1,10 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from uuid import UUID
+import os
 
 from app.deps import get_db
 from app.services.examples import ingest_example_file
 from app.models.examples import ProposalExample, ExampleSection
+from app.core.config import DB_DIRECTORY, EXAMPLES_COLLECTION
+from chromadb import PersistentClient
 
 router = APIRouter(prefix="/examples", tags=["examples"])
 
@@ -73,13 +77,18 @@ def list_examples(db: Session = Depends(get_db)):
 @router.get("/{example_id}/sections")
 def get_example_sections(example_id: str, limit: int = 10, db: Session = Depends(get_db)):
     """Return section texts for a given example (truncated previews)."""
-    ex = db.query(ProposalExample).filter(ProposalExample.id == example_id).first()
+    try:
+        example_uuid = UUID(example_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid example ID format")
+
+    ex = db.query(ProposalExample).filter(ProposalExample.id == example_uuid).first()
     if not ex:
         raise HTTPException(status_code=404, detail="Example not found")
 
     q = (
         db.query(ExampleSection)
-        .filter(ExampleSection.example_id == example_id)
+        .filter(ExampleSection.example_id == example_uuid)
         .order_by(ExampleSection.section_key.asc())
     )
     sections = q.limit(max(1, min(limit, 100))).all()
@@ -100,3 +109,44 @@ def get_example_sections(example_id: str, limit: int = 10, db: Session = Depends
             for s in sections
         ],
     }
+
+
+@router.delete("/{example_id}")
+def delete_example(example_id: str, db: Session = Depends(get_db)):
+    """Delete an example and all its associated data."""
+    try:
+        example_uuid = UUID(example_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid example ID format")
+
+    # Find the example
+    example = db.query(ProposalExample).filter(ProposalExample.id == example_uuid).first()
+    if not example:
+        raise HTTPException(status_code=404, detail="Example not found")
+
+    try:
+        # Delete from Chroma collection
+        client = PersistentClient(path=DB_DIRECTORY)
+        try:
+            collection = client.get_collection(EXAMPLES_COLLECTION)
+            # Delete all documents with this example_id
+            collection.delete(where={"example_id": example_id})
+        except Exception as e:
+            print(f"Warning: Could not delete from Chroma collection: {e}")
+
+        # Delete the source file if it exists
+        if example.source_path and os.path.exists(example.source_path):
+            try:
+                os.remove(example.source_path)
+            except Exception as e:
+                print(f"Warning: Could not delete source file {example.source_path}: {e}")
+
+        # Delete from database (cascade will handle sections)
+        db.delete(example)
+        db.commit()
+
+        return {"message": "Example deleted successfully"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete example: {str(e)}")

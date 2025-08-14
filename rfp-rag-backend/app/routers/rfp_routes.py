@@ -767,8 +767,8 @@ def _compile_md(sections: List[Dict[str, Any]]) -> str:
 async def proposal_save(
     project_id: str,
     title: Optional[str] = Body(default="Proposal Draft", embed=True),
-    sections: List[Dict[str, Any]] = Body(..., embed=True),  # [{id,title,html}]
-    versioned: bool = Body(default=True, embed=True),
+    sections: List[Dict[str, Any]] = Body(..., embed=True),  # [{id,title,html,instruction?}]
+    metadata: Optional[Dict[str, Any]] = Body(default=None, embed=True),  # Additional metadata
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user),
 ):
@@ -778,14 +778,19 @@ async def proposal_save(
 
     drafts_dir = _draft_dir(project_id)
     ts = int(time.time())
-    stem = f"draft_{ts}" if versioned else "draft_latest"
 
-    json_path = os.path.join(drafts_dir, f"{stem}.json")
-    html_path = os.path.join(drafts_dir, f"{stem}.html")
+    json_path = os.path.join(drafts_dir, "draft.json")
+    html_path = os.path.join(drafts_dir, "draft.html")
     md_path   = os.path.join(_project_dir(project_id), "draft_proposal.md")  # maintain existing path for MD
 
-    # Persist JSON (full fidelity)
-    payload = {"title": title, "sections": sections, "timestamp": ts}
+    # Persist JSON (full fidelity) - include metadata if provided
+    payload = {
+        "title": title,
+        "sections": sections,
+        "timestamp": ts,
+        "metadata": metadata or {}
+    }
+
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
@@ -805,7 +810,6 @@ async def proposal_save(
 @router.get("/rfps/{project_id}/proposal-load")
 async def proposal_load(
     project_id: str,
-    version: Optional[str] = Query(default=None, description="Filename like draft_1712345678.json; if omitted, load latest"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user),
 ):
@@ -814,20 +818,14 @@ async def proposal_load(
         raise HTTPException(status_code=404, detail="RFP project not found.")
 
     drafts_dir = _draft_dir(project_id)
+    json_path = os.path.join(drafts_dir, "draft.json")
 
-    def _latest_json() -> Optional[str]:
-        files = [f for f in os.listdir(drafts_dir) if f.endswith(".json")]
-        if not files:
-            return None
-        files.sort(reverse=True)  # draft_1689012345.json → descending timestamp by name
-        return os.path.join(drafts_dir, files[0])
-
-    json_path = os.path.join(drafts_dir, version) if version else _latest_json()
-    if not json_path or not os.path.isfile(json_path):
+    if not os.path.isfile(json_path):
         raise HTTPException(status_code=404, detail="No draft found.")
 
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+
     return data
 
 
